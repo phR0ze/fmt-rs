@@ -1,0 +1,21 @@
+[package]
+name = "libfmt"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Simple Rust source code formatter library"
+repository = "https://github.com/phR0ze/fmt-rs/libfmt"
+exclude = [
+    "docs",
+    "config",
+    "examples",
+    ".git",
+    ".githooks",
+    ".github",
+    "tests",
+    "benches",
+    "target",
+    ".vscode",
+]
+
+[dependencies]
