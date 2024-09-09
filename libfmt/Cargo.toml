@@ -19,3 +19,6 @@ exclude = [
 ]
 
 [dependencies]
+rustc-ap-rustc_ast = "727.0.0"
+rustc-ap-rustc_lexer = "727.0.0"
+rustc-ap-rustc_span = "727.0.0"

@@ -4,11 +4,22 @@ WIP: Simple Rust source code formatter.
 ### Goals
 * Less scrolling due to vertical alignment
 * Closer to the `gofmt` design pattern
-* Make use of stable Rust
 
 ### Usage
 WIP: working on a simple cli binary to read and format code
 
+## Contributing
+The Rust AST related crates can only be built on `Nightly`.
+
+### Setup Nightly for builds
+1. Install rust nightly with `rustup`
+   ```bash
+   $ rustup toolchain install nightly
+   ```
+2. Switch to nightly as your default
+   ```bash
+   $ rustup default nightly
+   ```
 
 ## How I got here
 My frustration with `rustfmt` has brought me to a crossroads, either I give up on Rust, live with 
