@@ -3,7 +3,7 @@ My frustration with `rustfmt` has brought me to a crossroads, either I give up o
 only manual code formatting or build my own simple formatting tool.
 
 ### Background
-Of course this is highly subjective but every time I go to write something in Rust I hit run into 
+Of course this is highly subjective but every time I go to write something in Rust I run into 
 issues with `rustfmt` that leave a bad taste in my mouth. I can't stand it. I've spent countless 
 hours trying to configure it to be reasonable. `rustfmt` isn't smart enough to format code well. It 
 is strongly opinionated with an emphasis on highly vertical code which drives me crazy.
