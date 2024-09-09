@@ -1,6 +1,6 @@
 # fmt-rs
-My frustration with `rustfmt` has brought me to a crossroads, either I give up on Rust, live only 
-manual code formatting or build my own simple formatting tool.
+My frustration with `rustfmt` has brought me to a crossroads, either I give up on Rust, live with
+only manual code formatting or build my own simple formatting tool.
 
 ### Background
 Of course this is highly subjective but every time I go to write something in Rust I hit run into 
