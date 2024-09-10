@@ -2,37 +2,62 @@
 WIP: Simple Rust source code formatter.
 
 ### Goals
-* Less scrolling due to vertical alignment
-* Closer to the `gofmt` design pattern
+* Reduce scrolling due to extreme vertical alignment prejudice
+* Provide something closer to the `gofmt` design pattern
+* Able to be built with off the shelf crates and stable Rust
 
 ### Usage
 WIP: working on a simple cli binary to read and format code
 
+### Existing work
+The only works in this space that I could find were non-starters based on my intended goals. David 
+Tolnay's excellent `PrettyPlease` was the closest option but is really intended for a different 
+purpose and adhere's to Rustfmt's styling as well.
+
+* [PrettyPlease](https://github.com/dtolnay/prettyplease)
+  * Excellent work by David Tolnay
+  * Pioneered the ability to build a tool like this from crates.io with stable rust
+  * Designed for formatting generated code as closely to Rustfmt's style as possible
+* [Community standard](https://github.com/rust-lang/rustfmt)
+  * Extreme vertical alignment preference
+  * Unable to be built from published crates
+* [rsfmt](https://github.com/zBaitu/rsfmt)
+  * Depends on older published ast bits that require an older version of nightly
+
 ## Contributing
 The Rust AST related crates can only be built on `Nightly`.
 
-### Setup Nightly for builds
-1. Install rust nightly with `rustup`
-   ```bash
-   $ rustup toolchain install nightly
-   ```
-2. Switch to nightly as your default
-   ```bash
-   $ rustup default nightly
-   ```
+### NixOS dev shell
+To setup a NixOS dev shell run `nix develop` from the root of this project which will use the 
+`flake.nix` to install Rust nightly and make it available in the shell.
 
 ## How I got here
-My frustration with `rustfmt` has brought me to a crossroads, either I give up on Rust, live with 
-only manual code formatting or build my own simple formatting tool.
+My frustration with `rustfmt` has brought me to a crossroads. It seems the only tool usable off the 
+shelf, in the community, for on-save code formatting is `rustfmt`. This means I either need to give 
+up on Rust, live with some form of manual code formatting or build an alternative that allows for a 
+less abrasive approach than `rustfmt`.
 
 Of course this is highly subjective but every time I go to write something in Rust I run into 
 issues with `rustfmt` that leave a bad taste in my mouth. I can't stand it. I've spent countless 
-hours trying to configure it to be reasonable. `rustfmt` isn't smart enough to format code well. It 
-is strongly opinionated with an emphasis on highly vertical code which drives me crazy.
+hours trying to configure it to be reasonable. `rustfmt` is strongly opinionated with an emphasis on 
+highly vertical code which drives me crazy. Unfortunatly for all the configuration options available 
+the only levers that seem to exist for alignement are to allow for code to blindly extend to the 
+right farther until the specified limit at which point the algorithm trips back into an extreme 
+vertical view. Neither option is useful. The key, in my opionion, is to break the line semantically 
+when complexity warrants separating an operation at which point the operational thought should remain 
+intact while using as much of the screen realestate as possible.
 
 From my research the community seems split in two camps, those that like `rustfmt` and those that 
 would prefer something closer to `gofmt`. I also tend to align more closely with the latter. Semantic 
 consistency is of more value to me than syntactic consistency.
+
+### Nightly
+As called out by others Rustfmt is written using rustc's internal syntax tree, so it can't be built 
+by a stable compiler. Additionally it's releases are not regularly published to crates.io. This has 
+the unfortunate affect of having to depend on a git dependency directly rather than crates.io and 
+precludes the ability to publish anything based on it back to crates.io. Alternatives like 
+`prettyplease` are designed to be easily pulled in as a library depency and buildable by the stable 
+compiler.
 
 ### References
 * [Key Rust devs are disgruntled with rustfmt](https://users.rust-lang.org/t/what-do-you-think-about-gofmt-vs-rustfmt/51605)

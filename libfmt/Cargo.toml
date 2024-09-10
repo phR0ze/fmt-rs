@@ -3,8 +3,10 @@ name = "libfmt"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
+categories = ["development-tools"]
 description = "Simple Rust source code formatter library"
 repository = "https://github.com/phR0ze/fmt-rs/libfmt"
+keywords = ["rustfmt"]
 exclude = [
     "docs",
     "config",
@@ -19,6 +21,4 @@ exclude = [
 ]
 
 [dependencies]
-rustc-ap-rustc_ast = "727.0.0"
-rustc-ap-rustc_lexer = "727.0.0"
-rustc-ap-rustc_span = "727.0.0"
+syn = { version = "2.0.76", default-features = false, features = ["full"] }
