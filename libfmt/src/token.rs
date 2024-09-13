@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use proc_macro2::{Delimiter, Ident, Literal, Spacing, TokenStream, TokenTree};
 
 impl Engine {
@@ -31,19 +31,19 @@ impl Engine {
     }
 
     pub fn ident(&mut self, ident: &Ident) {
-        self.word(ident.to_string());
+        self.scan_string(ident.to_string());
     }
 
     pub fn token_punct(&mut self, ch: char) {
-        self.word(ch.to_string());
+        self.scan_string(ch.to_string());
     }
 
     pub fn token_literal(&mut self, literal: &Literal) {
-        self.word(literal.to_string());
+        self.scan_string(literal.to_string());
     }
 
     pub fn delimiter_open(&mut self, delimiter: Delimiter) {
-        self.word(match delimiter {
+        self.scan_string(match delimiter {
             Delimiter::Parenthesis => "(",
             Delimiter::Brace => "{",
             Delimiter::Bracket => "[",
@@ -52,7 +52,7 @@ impl Engine {
     }
 
     pub fn delimiter_close(&mut self, delimiter: Delimiter) {
-        self.word(match delimiter {
+        self.scan_string(match delimiter {
             Delimiter::Parenthesis => ")",
             Delimiter::Brace => "}",
             Delimiter::Bracket => "]",

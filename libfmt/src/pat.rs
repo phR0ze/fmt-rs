@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
 use crate::INDENT;
@@ -36,14 +36,14 @@ impl Engine {
     fn pat_ident(&mut self, pat: &PatIdent) {
         self.outer_attrs(&pat.attrs);
         if pat.by_ref.is_some() {
-            self.word("ref ");
+            self.scan_string("ref ");
         }
         if pat.mutability.is_some() {
-            self.word("mut ");
+            self.scan_string("mut ");
         }
         self.ident(&pat.ident);
         if let Some((_at_token, subpat)) = &pat.subpat {
-            self.word(" @ ");
+            self.scan_string(" @ ");
             self.pat(subpat);
         }
     }
@@ -61,56 +61,56 @@ impl Engine {
             }
         }
         if consistent_break {
-            self.cbox(0);
+            self.scan_begin_consistent(0);
         } else {
-            self.ibox(0);
+            self.scan_begin_iconsistent(0);
         }
         for case in pat.cases.iter().delimited() {
             if !case.is_first {
                 self.space();
-                self.word("| ");
+                self.scan_string("| ");
             }
             self.pat(&case);
         }
-        self.end();
+        self.scan_end();
     }
 
     fn pat_paren(&mut self, pat: &PatParen) {
         self.outer_attrs(&pat.attrs);
-        self.word("(");
+        self.scan_string("(");
         self.pat(&pat.pat);
-        self.word(")");
+        self.scan_string(")");
     }
 
     fn pat_reference(&mut self, pat: &PatReference) {
         self.outer_attrs(&pat.attrs);
-        self.word("&");
+        self.scan_string("&");
         if pat.mutability.is_some() {
-            self.word("mut ");
+            self.scan_string("mut ");
         }
         self.pat(&pat.pat);
     }
 
     fn pat_rest(&mut self, pat: &PatRest) {
         self.outer_attrs(&pat.attrs);
-        self.word("..");
+        self.scan_string("..");
     }
 
     fn pat_slice(&mut self, pat: &PatSlice) {
         self.outer_attrs(&pat.attrs);
-        self.word("[");
+        self.scan_string("[");
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             self.trailing_comma(elem.is_last);
         }
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn pat_struct(&mut self, pat: &PatStruct) {
         self.outer_attrs(&pat.attrs);
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.path(&pat.path, PathKind::Expr);
-        self.word(" {");
+        self.scan_string(" {");
         self.space_if_nonempty();
         for field in pat.fields.iter().delimited() {
             self.field_pat(&field);
@@ -121,20 +121,20 @@ impl Engine {
             self.space();
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("}");
+        self.scan_end();
+        self.scan_string("}");
     }
 
     fn pat_tuple(&mut self, pat: &PatTuple) {
         self.outer_attrs(&pat.attrs);
-        self.word("(");
-        self.cbox(INDENT);
+        self.scan_string("(");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             if pat.elems.len() == 1 {
                 if pat.elems.trailing_punct() {
-                    self.word(",");
+                    self.scan_string(",");
                 }
                 self.zerobreak();
             } else {
@@ -142,29 +142,29 @@ impl Engine {
             }
         }
         self.offset(-INDENT);
-        self.end();
-        self.word(")");
+        self.scan_end();
+        self.scan_string(")");
     }
 
     fn pat_tuple_struct(&mut self, pat: &PatTupleStruct) {
         self.outer_attrs(&pat.attrs);
         self.path(&pat.path, PathKind::Expr);
-        self.word("(");
-        self.cbox(INDENT);
+        self.scan_string("(");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             self.trailing_comma(elem.is_last);
         }
         self.offset(-INDENT);
-        self.end();
-        self.word(")");
+        self.scan_end();
+        self.scan_string(")");
     }
 
     pub fn pat_type(&mut self, pat: &PatType) {
         self.outer_attrs(&pat.attrs);
         self.pat(&pat.pat);
-        self.word(": ");
+        self.scan_string(": ");
         self.ty(&pat.ty);
     }
 
@@ -222,31 +222,31 @@ impl Engine {
 
         match pat {
             PatVerbatim::Ellipsis => {
-                self.word("...");
+                self.scan_string("...");
             }
             PatVerbatim::Box(pat) => {
-                self.word("box ");
+                self.scan_string("box ");
                 self.pat(&pat);
             }
             PatVerbatim::Const(pat) => {
-                self.word("const ");
+                self.scan_string("const ");
                 self.cbox(INDENT);
                 self.small_block(&pat.block, &pat.attrs);
-                self.end();
+                self.scan_end();
             }
         }
     }
 
     fn pat_wild(&mut self, pat: &PatWild) {
         self.outer_attrs(&pat.attrs);
-        self.word("_");
+        self.scan_string("_");
     }
 
     fn field_pat(&mut self, field_pat: &FieldPat) {
         self.outer_attrs(&field_pat.attrs);
         if field_pat.colon_token.is_some() {
             self.member(&field_pat.member);
-            self.word(": ");
+            self.scan_string(": ");
         }
         self.pat(&field_pat.pat);
     }

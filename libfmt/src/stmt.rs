@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use crate::INDENT;
 use syn::{BinOp, Expr, Stmt};
 
@@ -7,50 +7,50 @@ impl Engine {
         match stmt {
             Stmt::Local(local) => {
                 self.outer_attrs(&local.attrs);
-                self.ibox(0);
-                self.word("let ");
+                self.scan_begin_iconsistent(0);
+                self.scan_string("let ");
                 self.pat(&local.pat);
                 if let Some(local_init) = &local.init {
-                    self.word(" = ");
+                    self.scan_string(" = ");
                     self.neverbreak();
                     self.expr(&local_init.expr);
                     if let Some((_else, diverge)) = &local_init.diverge {
                         self.space();
-                        self.word("else ");
-                        self.end();
+                        self.scan_string("else ");
+                        self.scan_end();
                         self.neverbreak();
                         if let Expr::Block(expr) = diverge.as_ref() {
-                            self.cbox(INDENT);
+                            self.scan_begin_consistent(INDENT);
                             self.small_block(&expr.block, &[]);
-                            self.end();
+                            self.scan_end();
                         } else {
-                            self.word("{");
+                            self.scan_string("{");
                             self.space();
-                            self.ibox(INDENT);
+                            self.scan_begin_iconsistent(INDENT);
                             self.expr(diverge);
-                            self.end();
+                            self.scan_end();
                             self.space();
                             self.offset(-INDENT);
-                            self.word("}");
+                            self.scan_string("}");
                         }
                     } else {
-                        self.end();
+                        self.scan_end();
                     }
                 } else {
-                    self.end();
+                    self.scan_end();
                 }
-                self.word(";");
+                self.scan_string(";");
                 self.hardbreak();
             }
             Stmt::Item(item) => self.item(item),
             Stmt::Expr(expr, None) => {
                 if break_after(expr) {
-                    self.ibox(0);
+                    self.scan_begin_iconsistent(0);
                     self.expr_beginning_of_line(expr, true);
                     if add_semi(expr) {
-                        self.word(";");
+                        self.scan_string(";");
                     }
-                    self.end();
+                    self.scan_end();
                     self.hardbreak();
                 } else {
                     self.expr_beginning_of_line(expr, true);
@@ -62,12 +62,12 @@ impl Engine {
                         return;
                     }
                 }
-                self.ibox(0);
+                self.scan_begin_iconsistent(0);
                 self.expr_beginning_of_line(expr, true);
                 if !remove_semi(expr) {
-                    self.word(";");
+                    self.scan_string(";");
                 }
-                self.end();
+                self.scan_end();
                 self.hardbreak();
             }
             Stmt::Macro(stmt) => {

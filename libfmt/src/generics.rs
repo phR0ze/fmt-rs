@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
 use crate::INDENT;
@@ -16,8 +16,8 @@ impl Engine {
             return;
         }
 
-        self.word("<");
-        self.cbox(0);
+        self.scan_string("<");
+        self.scan_begin_consistent(0);
         self.zerobreak();
 
         // Print lifetimes before types and consts, regardless of their
@@ -44,8 +44,8 @@ impl Engine {
         }
 
         self.offset(-INDENT);
-        self.end();
-        self.word(">");
+        self.scan_end();
+        self.scan_string(">");
     }
 
     fn generic_param(&mut self, generic_param: &GenericParam) {
@@ -57,14 +57,14 @@ impl Engine {
     }
 
     pub fn bound_lifetimes(&mut self, bound_lifetimes: &BoundLifetimes) {
-        self.word("for<");
+        self.scan_string("for<");
         for param in bound_lifetimes.lifetimes.iter().delimited() {
             self.generic_param(&param);
             if !param.is_last {
-                self.word(", ");
+                self.scan_string(", ");
             }
         }
-        self.word("> ");
+        self.scan_string("> ");
     }
 
     fn lifetime_param(&mut self, lifetime_param: &LifetimeParam) {
@@ -72,9 +72,9 @@ impl Engine {
         self.lifetime(&lifetime_param.lifetime);
         for lifetime in lifetime_param.bounds.iter().delimited() {
             if lifetime.is_first {
-                self.word(": ");
+                self.scan_string(": ");
             } else {
-                self.word(" + ");
+                self.scan_string(" + ");
             }
             self.lifetime(&lifetime);
         }
@@ -83,22 +83,22 @@ impl Engine {
     fn type_param(&mut self, type_param: &TypeParam) {
         self.outer_attrs(&type_param.attrs);
         self.ident(&type_param.ident);
-        self.ibox(INDENT);
+        self.scan_begin_iconsistent(INDENT);
         for type_param_bound in type_param.bounds.iter().delimited() {
             if type_param_bound.is_first {
-                self.word(": ");
+                self.scan_string(": ");
             } else {
                 self.space();
-                self.word("+ ");
+                self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
         }
         if let Some(default) = &type_param.default {
             self.space();
-            self.word("= ");
+            self.scan_string("= ");
             self.ty(default);
         }
-        self.end();
+        self.scan_end();
     }
 
     pub fn type_param_bound(&mut self, type_param_bound: &TypeParamBound) {
@@ -116,10 +116,10 @@ impl Engine {
 
     fn trait_bound(&mut self, trait_bound: &TraitBound, tilde_const: bool) {
         if trait_bound.paren_token.is_some() {
-            self.word("(");
+            self.scan_string("(");
         }
         if tilde_const {
-            self.word("~const ");
+            self.scan_string("~const ");
         }
         self.trait_bound_modifier(&trait_bound.modifier);
         if let Some(bound_lifetimes) = &trait_bound.lifetimes {
@@ -127,19 +127,19 @@ impl Engine {
         }
         for segment in trait_bound.path.segments.iter().delimited() {
             if !segment.is_first || trait_bound.path.leading_colon.is_some() {
-                self.word("::");
+                self.scan_string("::");
             }
             self.path_segment(&segment, PathKind::Type);
         }
         if trait_bound.paren_token.is_some() {
-            self.word(")");
+            self.scan_string(")");
         }
     }
 
     fn trait_bound_modifier(&mut self, trait_bound_modifier: &TraitBoundModifier) {
         match trait_bound_modifier {
             TraitBoundModifier::None => {}
-            TraitBoundModifier::Maybe(_question_mark) => self.word("?"),
+            TraitBoundModifier::Maybe(_question_mark) => self.scan_string("?"),
         }
     }
 
@@ -221,20 +221,20 @@ impl Engine {
 
         match bound {
             TypeParamBoundVerbatim::Ellipsis => {
-                self.word("...");
+                self.scan_string("...");
             }
             TypeParamBoundVerbatim::PreciseCapture(captures) => {
-                self.word("use<");
+                self.scan_string("use<");
                 for capture in captures.iter().delimited() {
                     match *capture {
                         Capture::Lifetime(lifetime) => self.lifetime(lifetime),
                         Capture::Type(ident) => self.ident(ident),
                     }
                     if !capture.is_last {
-                        self.word(", ");
+                        self.scan_string(", ");
                     }
                 }
-                self.word(">");
+                self.scan_string(">");
             }
             TypeParamBoundVerbatim::TildeConst(trait_bound) => {
                 let tilde_const = true;
@@ -245,12 +245,12 @@ impl Engine {
 
     fn const_param(&mut self, const_param: &ConstParam) {
         self.outer_attrs(&const_param.attrs);
-        self.word("const ");
+        self.scan_string("const ");
         self.ident(&const_param.ident);
-        self.word(": ");
+        self.scan_string(": ");
         self.ty(&const_param.ty);
         if let Some(default) = &const_param.default {
-            self.word(" = ");
+            self.scan_string(" = ");
             self.expr(default);
         }
     }
@@ -289,7 +289,7 @@ impl Engine {
             Some(where_clause) if !where_clause.predicates.is_empty() => where_clause,
             _ => {
                 if semi {
-                    self.word(";");
+                    self.scan_string(";");
                 } else {
                     self.nbsp();
                 }
@@ -299,14 +299,14 @@ impl Engine {
         if hardbreaks {
             self.hardbreak();
             self.offset(-INDENT);
-            self.word("where");
+            self.scan_string("where");
             self.hardbreak();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
-                    self.word(";");
+                    self.scan_string(";");
                 } else {
-                    self.word(",");
+                    self.scan_string(",");
                     self.hardbreak();
                 }
             }
@@ -316,12 +316,12 @@ impl Engine {
         } else {
             self.space();
             self.offset(-INDENT);
-            self.word("where");
+            self.scan_string("where");
             self.space();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
-                    self.word(";");
+                    self.scan_string(";");
                 } else {
                     self.trailing_comma_or_space(predicate.is_last);
                 }
@@ -346,37 +346,37 @@ impl Engine {
             self.bound_lifetimes(bound_lifetimes);
         }
         self.ty(&predicate.bounded_ty);
-        self.word(":");
+        self.scan_string(":");
         if predicate.bounds.len() == 1 {
-            self.ibox(0);
+            self.scan_begin_iconsistent(0);
         } else {
-            self.ibox(INDENT);
+            self.scan_begin_iconsistent(INDENT);
         }
         for type_param_bound in predicate.bounds.iter().delimited() {
             if type_param_bound.is_first {
                 self.nbsp();
             } else {
                 self.space();
-                self.word("+ ");
+                self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
         }
-        self.end();
+        self.scan_end();
     }
 
     fn predicate_lifetime(&mut self, predicate: &PredicateLifetime) {
         self.lifetime(&predicate.lifetime);
-        self.word(":");
-        self.ibox(INDENT);
+        self.scan_string(":");
+        self.scan_begin_iconsistent(INDENT);
         for lifetime in predicate.bounds.iter().delimited() {
             if lifetime.is_first {
                 self.nbsp();
             } else {
                 self.space();
-                self.word("+ ");
+                self.scan_string("+ ");
             }
             self.lifetime(&lifetime);
         }
-        self.end();
+        self.scan_end();
     }
 }

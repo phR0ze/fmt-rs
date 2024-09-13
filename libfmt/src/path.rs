@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::INDENT;
 use std::ptr;
@@ -23,7 +23,7 @@ impl Engine {
         assert!(!path.segments.is_empty());
         for segment in path.segments.iter().delimited() {
             if !segment.is_first || path.leading_colon.is_some() {
-                self.word("::");
+                self.scan_string("::");
             }
             self.path_segment(&segment, kind);
         }
@@ -59,9 +59,9 @@ impl Engine {
                     // ERROR CORRECTION: Add braces to make sure that the
                     // generated code is valid.
                     _ => {
-                        self.word("{");
+                        self.scan_string("{");
                         self.expr(expr);
-                        self.word("}");
+                        self.scan_string("}");
                     }
                 }
             }
@@ -82,10 +82,10 @@ impl Engine {
         }
 
         if path_kind == PathKind::Expr {
-            self.word("::");
+            self.scan_string("::");
         }
-        self.word("<");
-        self.cbox(INDENT);
+        self.scan_string("<");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
 
         // Print lifetimes before types/consts/bindings, regardless of their
@@ -118,8 +118,8 @@ impl Engine {
         }
 
         self.offset(-INDENT);
-        self.end();
-        self.word(">");
+        self.scan_end();
+        self.scan_string(">");
     }
 
     fn assoc_type(&mut self, assoc: &AssocType) {
@@ -127,7 +127,7 @@ impl Engine {
         if let Some(generics) = &assoc.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.word(" = ");
+        self.scan_string(" = ");
         self.ty(&assoc.ty);
     }
 
@@ -136,7 +136,7 @@ impl Engine {
         if let Some(generics) = &assoc.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.word(" = ");
+        self.scan_string(" = ");
         self.expr(&assoc.value);
     }
 
@@ -145,31 +145,31 @@ impl Engine {
         if let Some(generics) = &constraint.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.ibox(INDENT);
+        self.scan_begin_iconsistent(INDENT);
         for bound in constraint.bounds.iter().delimited() {
             if bound.is_first {
-                self.word(": ");
+                self.scan_string(": ");
             } else {
                 self.space();
-                self.word("+ ");
+                self.scan_string("+ ");
             }
             self.type_param_bound(&bound);
         }
-        self.end();
+        self.scan_end();
     }
 
     fn parenthesized_generic_arguments(&mut self, arguments: &ParenthesizedGenericArguments) {
-        self.cbox(INDENT);
-        self.word("(");
+        self.scan_begin_consistent(INDENT);
+        self.scan_string("(");
         self.zerobreak();
         for ty in arguments.inputs.iter().delimited() {
             self.ty(&ty);
             self.trailing_comma(ty.is_last);
         }
         self.offset(-INDENT);
-        self.word(")");
+        self.scan_string(")");
         self.return_type(&arguments.output);
-        self.end();
+        self.scan_end();
     }
 
     pub fn qpath(&mut self, qself: &Option<QSelf>, path: &Path, kind: PathKind) {
@@ -182,26 +182,26 @@ impl Engine {
 
         assert!(qself.position < path.segments.len());
 
-        self.word("<");
+        self.scan_string("<");
         self.ty(&qself.ty);
 
         let mut segments = path.segments.iter();
         if qself.position > 0 {
-            self.word(" as ");
+            self.scan_string(" as ");
             for segment in segments.by_ref().take(qself.position).delimited() {
                 if !segment.is_first || path.leading_colon.is_some() {
-                    self.word("::");
+                    self.scan_string("::");
                 }
                 self.path_segment(&segment, PathKind::Type);
                 if segment.is_last {
-                    self.word(">");
+                    self.scan_string(">");
                 }
             }
         } else {
-            self.word(">");
+            self.scan_string(">");
         }
         for segment in segments {
-            self.word("::");
+            self.scan_string("::");
             self.path_segment(segment, kind);
         }
     }

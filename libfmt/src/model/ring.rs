@@ -1,9 +1,13 @@
 use std::collections::VecDeque;
+use std::fmt;
 use std::ops::{Index, IndexMut};
+
+use super::BufEntry;
 
 /// RingBuffer provides a circular buffer.
 pub struct RingBuffer<T> {
     data: VecDeque<T>,
+
     // Abstract index of data[0] in infinitely sized queue
     offset: usize,
 }
@@ -24,6 +28,7 @@ impl<T> RingBuffer<T> {
         self.data.len()
     }
 
+    /// Push the valut onto the end of the buffer and return the index of the value.
     pub fn push(&mut self, value: T) -> usize {
         let index = self.offset + self.data.len();
         self.data.push_back(value);
@@ -34,10 +39,12 @@ impl<T> RingBuffer<T> {
         self.data.clear();
     }
 
+    /// Get the index of the first element in the buffer.
     pub fn index_of_first(&self) -> usize {
         self.offset
     }
 
+    /// Get the value of the first element in the buffer.
     pub fn first(&self) -> &T {
         &self.data[0]
     }
@@ -78,5 +85,37 @@ impl<T> Index<usize> for RingBuffer<T> {
 impl<T> IndexMut<usize> for RingBuffer<T> {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         &mut self.data[index.checked_sub(self.offset).unwrap()]
+    }
+}
+
+impl fmt::Display for RingBuffer<BufEntry> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "RingBuffer {{")?;
+        for i in 0..self.len() {
+            writeln!(f, "  [{}] = {:?}", i, &self[i])?;
+        }
+        writeln!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Token;
+    use std::borrow::Cow;
+
+    #[test]
+    fn test_ring_buffer_debug() {
+        let mut buf: RingBuffer<BufEntry> = RingBuffer::new();
+        buf.push(BufEntry {
+            token: Token::String(Cow::Borrowed("hello")),
+            size: 5,
+        });
+        assert_eq!(
+            format!("{}", buf),
+            "RingBuffer {\n  [0] = BufEntry { token: String(\"hello\"), size: 5 }\n}\n",
+        );
     }
 }

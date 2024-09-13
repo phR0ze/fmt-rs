@@ -1,6 +1,7 @@
-use crate::algorithm::{BreakToken, Engine};
 use crate::attr;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
+use crate::model::BreakToken;
 use crate::path::PathKind;
 use crate::stmt;
 use crate::INDENT;
@@ -87,9 +88,9 @@ impl Engine {
             }
             Expr::Try(expr) => self.subexpr_try(expr, beginning_of_line),
             _ => {
-                self.cbox(-INDENT);
+                self.scan_begin_consistent(-INDENT);
                 self.expr(expr);
-                self.end();
+                self.scan_end();
             }
         }
     }
@@ -97,80 +98,80 @@ impl Engine {
     fn wrap_exterior_struct(&mut self, expr: &Expr) {
         let needs_paren = contains_exterior_struct_lit(expr);
         if needs_paren {
-            self.word("(");
+            self.scan_string("(");
         }
-        self.cbox(0);
+        self.scan_begin_consistent(0);
         self.expr(expr);
         if needs_paren {
-            self.word(")");
+            self.scan_string(")");
         }
         if needs_newline_if_wrap(expr) {
             self.space();
         } else {
             self.nbsp();
         }
-        self.end();
+        self.scan_end();
     }
 
     fn expr_array(&mut self, expr: &ExprArray) {
         self.outer_attrs(&expr.attrs);
-        self.word("[");
-        self.cbox(INDENT);
+        self.scan_string("[");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for element in expr.elems.iter().delimited() {
             self.expr(&element);
             self.trailing_comma(element.is_last);
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("]");
+        self.scan_end();
+        self.scan_string("]");
     }
 
     fn expr_assign(&mut self, expr: &ExprAssign) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
         self.expr(&expr.left);
-        self.word(" = ");
+        self.scan_string(" = ");
         self.neverbreak();
         self.expr(&expr.right);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_async(&mut self, expr: &ExprAsync) {
         self.outer_attrs(&expr.attrs);
-        self.word("async ");
+        self.scan_string("async ");
         if expr.capture.is_some() {
-            self.word("move ");
+            self.scan_string("move ");
         }
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.small_block(&expr.block, &expr.attrs);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_await(&mut self, expr: &ExprAwait, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.subexpr_await(expr, beginning_of_line);
-        self.end();
+        self.scan_end();
     }
 
     fn subexpr_await(&mut self, expr: &ExprAwait, beginning_of_line: bool) {
         self.subexpr(&expr.base, beginning_of_line);
         self.zerobreak_unless_short_ident(beginning_of_line, &expr.base);
-        self.word(".await");
+        self.scan_string(".await");
     }
 
     fn expr_binary(&mut self, expr: &ExprBinary) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(INDENT);
-        self.ibox(-INDENT);
+        self.scan_begin_iconsistent(INDENT);
+        self.scan_begin_iconsistent(-INDENT);
         self.expr(&expr.left);
-        self.end();
+        self.scan_end();
         self.space();
         self.binary_operator(&expr.op);
         self.nbsp();
         self.expr(&expr.right);
-        self.end();
+        self.scan_end();
     }
 
     pub fn expr_block(&mut self, expr: &ExprBlock) {
@@ -178,14 +179,14 @@ impl Engine {
         if let Some(label) = &expr.label {
             self.label(label);
         }
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.small_block(&expr.block, &expr.attrs);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_break(&mut self, expr: &ExprBreak) {
         self.outer_attrs(&expr.attrs);
-        self.word("break");
+        self.scan_string("break");
         if let Some(lifetime) = &expr.label {
             self.nbsp();
             self.lifetime(lifetime);
@@ -199,67 +200,67 @@ impl Engine {
     fn expr_call(&mut self, expr: &ExprCall, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
         self.expr_beginning_of_line(&expr.func, beginning_of_line);
-        self.word("(");
+        self.scan_string("(");
         self.call_args(&expr.args);
-        self.word(")");
+        self.scan_string(")");
     }
 
     fn subexpr_call(&mut self, expr: &ExprCall) {
         let beginning_of_line = false;
         self.subexpr(&expr.func, beginning_of_line);
-        self.word("(");
+        self.scan_string("(");
         self.call_args(&expr.args);
-        self.word(")");
+        self.scan_string(")");
     }
 
     fn expr_cast(&mut self, expr: &ExprCast) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(INDENT);
-        self.ibox(-INDENT);
+        self.scan_begin_iconsistent(INDENT);
+        self.scan_begin_iconsistent(-INDENT);
         self.expr(&expr.expr);
-        self.end();
+        self.scan_end();
         self.space();
-        self.word("as ");
+        self.scan_string("as ");
         self.ty(&expr.ty);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_closure(&mut self, expr: &ExprClosure) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
         if let Some(bound_lifetimes) = &expr.lifetimes {
             self.bound_lifetimes(bound_lifetimes);
         }
         if expr.constness.is_some() {
-            self.word("const ");
+            self.scan_string("const ");
         }
         if expr.movability.is_some() {
-            self.word("static ");
+            self.scan_string("static ");
         }
         if expr.asyncness.is_some() {
-            self.word("async ");
+            self.scan_string("async ");
         }
         if expr.capture.is_some() {
-            self.word("move ");
+            self.scan_string("move ");
         }
-        self.cbox(INDENT);
-        self.word("|");
+        self.scan_begin_consistent(INDENT);
+        self.scan_string("|");
         for pat in expr.inputs.iter().delimited() {
             if pat.is_first {
                 self.zerobreak();
             }
             self.pat(&pat);
             if !pat.is_last {
-                self.word(",");
+                self.scan_string(",");
                 self.space();
             }
         }
         match &expr.output {
             ReturnType::Default => {
-                self.word("|");
+                self.scan_string("|");
                 self.space();
                 self.offset(-INDENT);
-                self.end();
+                self.scan_end();
                 self.neverbreak();
                 let wrap_in_brace = match &*expr.body {
                     Expr::Match(ExprMatch { attrs, .. }) | Expr::Call(ExprCall { attrs, .. }) => {
@@ -268,7 +269,7 @@ impl Engine {
                     body => !is_blocklike(body),
                 };
                 if wrap_in_brace {
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     let okay_to_brace = parseable_as_stmt(&expr.body);
                     self.scan_break(BreakToken {
                         pre_break: Some(if okay_to_brace { '{' } else { '(' }),
@@ -281,7 +282,7 @@ impl Engine {
                         post_break: Some(if okay_to_brace { '}' } else { ')' }),
                         ..BreakToken::default()
                     });
-                    self.end();
+                    self.scan_end();
                 } else {
                     self.expr(&expr.body);
                 }
@@ -291,29 +292,29 @@ impl Engine {
                     self.trailing_comma(true);
                     self.offset(-INDENT);
                 }
-                self.word("|");
-                self.end();
-                self.word(" -> ");
+                self.scan_string("|");
+                self.scan_end();
+                self.scan_string(" -> ");
                 self.ty(ty);
                 self.nbsp();
                 self.neverbreak();
                 self.expr(&expr.body);
             }
         }
-        self.end();
+        self.scan_end();
     }
 
     pub fn expr_const(&mut self, expr: &ExprConst) {
         self.outer_attrs(&expr.attrs);
-        self.word("const ");
-        self.cbox(INDENT);
+        self.scan_string("const ");
+        self.scan_begin_consistent(INDENT);
         self.small_block(&expr.block, &expr.attrs);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_continue(&mut self, expr: &ExprContinue) {
         self.outer_attrs(&expr.attrs);
-        self.word("continue");
+        self.scan_string("continue");
         if let Some(lifetime) = &expr.label {
             self.nbsp();
             self.lifetime(lifetime);
@@ -322,41 +323,41 @@ impl Engine {
 
     fn expr_field(&mut self, expr: &ExprField, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.subexpr_field(expr, beginning_of_line);
-        self.end();
+        self.scan_end();
     }
 
     fn subexpr_field(&mut self, expr: &ExprField, beginning_of_line: bool) {
         self.subexpr(&expr.base, beginning_of_line);
         self.zerobreak_unless_short_ident(beginning_of_line, &expr.base);
-        self.word(".");
+        self.scan_string(".");
         self.member(&expr.member);
     }
 
     fn expr_for_loop(&mut self, expr: &ExprForLoop) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
         if let Some(label) = &expr.label {
             self.label(label);
         }
-        self.word("for ");
+        self.scan_string("for ");
         self.pat(&expr.pat);
-        self.word(" in ");
+        self.scan_string(" in ");
         self.neverbreak();
         self.wrap_exterior_struct(&expr.expr);
-        self.word("{");
+        self.scan_string("{");
         self.neverbreak();
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("}");
-        self.end();
+        self.scan_end();
+        self.scan_string("}");
+        self.scan_end();
     }
 
     fn expr_group(&mut self, expr: &ExprGroup) {
@@ -366,22 +367,22 @@ impl Engine {
 
     fn expr_if(&mut self, expr: &ExprIf) {
         self.outer_attrs(&expr.attrs);
-        self.cbox(INDENT);
-        self.word("if ");
-        self.cbox(-INDENT);
+        self.scan_begin_consistent(INDENT);
+        self.scan_string("if ");
+        self.scan_begin_consistent(-INDENT);
         self.wrap_exterior_struct(&expr.cond);
-        self.end();
+        self.scan_end();
         if let Some((_else_token, else_branch)) = &expr.else_branch {
             let mut else_branch = &**else_branch;
             self.small_block(&expr.then_branch, &[]);
             loop {
-                self.word(" else ");
+                self.scan_string(" else ");
                 match else_branch {
                     Expr::If(expr) => {
-                        self.word("if ");
-                        self.cbox(-INDENT);
+                        self.scan_string("if ");
+                        self.scan_begin_consistent(-INDENT);
                         self.wrap_exterior_struct(&expr.cond);
-                        self.end();
+                        self.scan_end();
                         self.small_block(&expr.then_branch, &[]);
                         if let Some((_else_token, next)) = &expr.else_branch {
                             else_branch = next;
@@ -394,72 +395,72 @@ impl Engine {
                     // If not one of the valid expressions to exist in an else
                     // clause, wrap in a block.
                     other => {
-                        self.word("{");
+                        self.scan_string("{");
                         self.space();
-                        self.ibox(INDENT);
+                        self.scan_begin_iconsistent(INDENT);
                         self.expr(other);
-                        self.end();
+                        self.scan_end();
                         self.space();
                         self.offset(-INDENT);
-                        self.word("}");
+                        self.scan_string("}");
                     }
                 }
                 break;
             }
         } else if expr.then_branch.stmts.is_empty() {
-            self.word("{}");
+            self.scan_string("{}");
         } else {
-            self.word("{");
+            self.scan_string("{");
             self.hardbreak();
             for stmt in &expr.then_branch.stmts {
                 self.stmt(stmt);
             }
             self.offset(-INDENT);
-            self.word("}");
+            self.scan_string("}");
         }
-        self.end();
+        self.scan_end();
     }
 
     fn expr_index(&mut self, expr: &ExprIndex, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
         self.expr_beginning_of_line(&expr.expr, beginning_of_line);
-        self.word("[");
+        self.scan_string("[");
         self.expr(&expr.index);
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn subexpr_index(&mut self, expr: &ExprIndex, beginning_of_line: bool) {
         self.subexpr(&expr.expr, beginning_of_line);
-        self.word("[");
+        self.scan_string("[");
         self.expr(&expr.index);
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn expr_infer(&mut self, expr: &ExprInfer) {
         self.outer_attrs(&expr.attrs);
-        self.word("_");
+        self.scan_string("_");
     }
 
     fn expr_let(&mut self, expr: &ExprLet) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
-        self.word("let ");
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
+        self.scan_string("let ");
+        self.scan_begin_iconsistent(0);
         self.pat(&expr.pat);
-        self.end();
-        self.word(" = ");
+        self.scan_end();
+        self.scan_string(" = ");
         self.neverbreak();
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
         let needs_paren = contains_exterior_struct_lit(&expr.expr);
         if needs_paren {
-            self.word("(");
+            self.scan_string("(");
         }
         self.expr(&expr.expr);
         if needs_paren {
-            self.word(")");
+            self.scan_string(")");
         }
-        self.end();
-        self.end();
+        self.scan_end();
+        self.scan_end();
     }
 
     pub fn expr_lit(&mut self, expr: &ExprLit) {
@@ -472,16 +473,16 @@ impl Engine {
         if let Some(label) = &expr.label {
             self.label(label);
         }
-        self.word("loop {");
-        self.cbox(INDENT);
+        self.scan_string("loop {");
+        self.scan_begin_consistent(INDENT);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("}");
+        self.scan_end();
+        self.scan_string("}");
     }
 
     pub fn expr_macro(&mut self, expr: &ExprMacro) {
@@ -492,12 +493,12 @@ impl Engine {
 
     fn expr_match(&mut self, expr: &ExprMatch) {
         self.outer_attrs(&expr.attrs);
-        self.ibox(0);
-        self.word("match ");
+        self.scan_begin_iconsistent(0);
+        self.scan_string("match ");
         self.wrap_exterior_struct(&expr.expr);
-        self.word("{");
+        self.scan_string("{");
         self.neverbreak();
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for arm in &expr.arms {
@@ -505,17 +506,17 @@ impl Engine {
             self.hardbreak();
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("}");
-        self.end();
+        self.scan_end();
+        self.scan_string("}");
+        self.scan_end();
     }
 
     fn expr_method_call(&mut self, expr: &ExprMethodCall, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         let unindent_call_args = beginning_of_line && is_short_ident(&expr.receiver);
         self.subexpr_method_call(expr, beginning_of_line, unindent_call_args);
-        self.end();
+        self.scan_end();
     }
 
     fn subexpr_method_call(
@@ -526,23 +527,23 @@ impl Engine {
     ) {
         self.subexpr(&expr.receiver, beginning_of_line);
         self.zerobreak_unless_short_ident(beginning_of_line, &expr.receiver);
-        self.word(".");
+        self.scan_string(".");
         self.ident(&expr.method);
         if let Some(turbofish) = &expr.turbofish {
             self.angle_bracketed_generic_arguments(turbofish, PathKind::Expr);
         }
-        self.cbox(if unindent_call_args { -INDENT } else { 0 });
-        self.word("(");
+        self.scan_begin_consistent(if unindent_call_args { -INDENT } else { 0 });
+        self.scan_string("(");
         self.call_args(&expr.args);
-        self.word(")");
-        self.end();
+        self.scan_string(")");
+        self.scan_end();
     }
 
     fn expr_paren(&mut self, expr: &ExprParen) {
         self.outer_attrs(&expr.attrs);
-        self.word("(");
+        self.scan_string("(");
         self.expr(&expr.expr);
-        self.word(")");
+        self.scan_string(")");
     }
 
     pub fn expr_path(&mut self, expr: &ExprPath) {
@@ -555,7 +556,7 @@ impl Engine {
         if let Some(start) = &expr.start {
             self.expr(start);
         }
-        self.word(match expr.limits {
+        self.scan_string(match expr.limits {
             RangeLimits::HalfOpen(_) => "..",
             RangeLimits::Closed(_) => "..=",
         });
@@ -566,25 +567,25 @@ impl Engine {
 
     fn expr_reference(&mut self, expr: &ExprReference) {
         self.outer_attrs(&expr.attrs);
-        self.word("&");
+        self.scan_string("&");
         if expr.mutability.is_some() {
-            self.word("mut ");
+            self.scan_string("mut ");
         }
         self.expr(&expr.expr);
     }
 
     fn expr_repeat(&mut self, expr: &ExprRepeat) {
         self.outer_attrs(&expr.attrs);
-        self.word("[");
+        self.scan_string("[");
         self.expr(&expr.expr);
-        self.word("; ");
+        self.scan_string("; ");
         self.expr(&expr.len);
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn expr_return(&mut self, expr: &ExprReturn) {
         self.outer_attrs(&expr.attrs);
-        self.word("return");
+        self.scan_string("return");
         if let Some(value) = &expr.expr {
             self.nbsp();
             self.expr(value);
@@ -593,62 +594,62 @@ impl Engine {
 
     fn expr_struct(&mut self, expr: &ExprStruct) {
         self.outer_attrs(&expr.attrs);
-        self.cbox(INDENT);
-        self.ibox(-INDENT);
+        self.scan_begin_consistent(INDENT);
+        self.scan_begin_iconsistent(-INDENT);
         self.qpath(&expr.qself, &expr.path, PathKind::Expr);
-        self.end();
-        self.word(" {");
+        self.scan_end();
+        self.scan_string(" {");
         self.space_if_nonempty();
         for field_value in expr.fields.iter().delimited() {
             self.field_value(&field_value);
             self.trailing_comma_or_space(field_value.is_last && expr.rest.is_none());
         }
         if let Some(rest) = &expr.rest {
-            self.word("..");
+            self.scan_string("..");
             self.expr(rest);
             self.space();
         }
         self.offset(-INDENT);
         self.end_with_max_width(34);
-        self.word("}");
+        self.scan_string("}");
     }
 
     fn expr_try(&mut self, expr: &ExprTry, beginning_of_line: bool) {
         self.outer_attrs(&expr.attrs);
         self.expr_beginning_of_line(&expr.expr, beginning_of_line);
-        self.word("?");
+        self.scan_string("?");
     }
 
     fn subexpr_try(&mut self, expr: &ExprTry, beginning_of_line: bool) {
         self.subexpr(&expr.expr, beginning_of_line);
-        self.word("?");
+        self.scan_string("?");
     }
 
     fn expr_try_block(&mut self, expr: &ExprTryBlock) {
         self.outer_attrs(&expr.attrs);
-        self.word("try ");
-        self.cbox(INDENT);
+        self.scan_string("try ");
+        self.scan_begin_consistent(INDENT);
         self.small_block(&expr.block, &expr.attrs);
-        self.end();
+        self.scan_end();
     }
 
     fn expr_tuple(&mut self, expr: &ExprTuple) {
         self.outer_attrs(&expr.attrs);
-        self.word("(");
-        self.cbox(INDENT);
+        self.scan_string("(");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for elem in expr.elems.iter().delimited() {
             self.expr(&elem);
             if expr.elems.len() == 1 {
-                self.word(",");
+                self.scan_string(",");
                 self.zerobreak();
             } else {
                 self.trailing_comma(elem.is_last);
             }
         }
         self.offset(-INDENT);
-        self.end();
-        self.word(")");
+        self.scan_end();
+        self.scan_string(")");
     }
 
     fn expr_unary(&mut self, expr: &ExprUnary) {
@@ -659,10 +660,10 @@ impl Engine {
 
     fn expr_unsafe(&mut self, expr: &ExprUnsafe) {
         self.outer_attrs(&expr.attrs);
-        self.word("unsafe ");
-        self.cbox(INDENT);
+        self.scan_string("unsafe ");
+        self.scan_begin_consistent(INDENT);
         self.small_block(&expr.block, &expr.attrs);
-        self.end();
+        self.scan_end();
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -760,35 +761,35 @@ impl Engine {
         match expr {
             ExprVerbatim::Empty => {}
             ExprVerbatim::Ellipsis => {
-                self.word("...");
+                self.scan_string("...");
             }
             ExprVerbatim::Become(expr) => {
                 self.outer_attrs(&expr.attrs);
-                self.word("become");
+                self.scan_string("become");
                 self.nbsp();
                 self.expr(&expr.tail_call);
             }
             ExprVerbatim::Builtin(expr) => {
                 self.outer_attrs(&expr.attrs);
-                self.word("builtin # ");
+                self.scan_string("builtin # ");
                 self.ident(&expr.name);
-                self.word("(");
+                self.scan_string("(");
                 if !expr.args.is_empty() {
                     self.cbox(INDENT);
                     self.zerobreak();
                     self.ibox(0);
                     self.macro_rules_tokens(expr.args, false);
-                    self.end();
+                    self.scan_end();
                     self.zerobreak();
                     self.offset(-INDENT);
-                    self.end();
+                    self.scan_end();
                 }
-                self.word(")");
+                self.scan_string(")");
             }
             ExprVerbatim::RawReference(expr) => {
                 self.outer_attrs(&expr.attrs);
-                self.word("&raw ");
-                self.word(if expr.mutable { "mut " } else { "const " });
+                self.scan_string("&raw ");
+                self.scan_string(if expr.mutable { "mut " } else { "const " });
                 self.expr(&expr.expr);
             }
         }
@@ -799,24 +800,24 @@ impl Engine {
         if let Some(label) = &expr.label {
             self.label(label);
         }
-        self.word("while ");
+        self.scan_string("while ");
         self.wrap_exterior_struct(&expr.cond);
-        self.word("{");
+        self.scan_string("{");
         self.neverbreak();
-        self.cbox(INDENT);
+        self.scan_begin_consistent(INDENT);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
         self.offset(-INDENT);
-        self.end();
-        self.word("}");
+        self.scan_end();
+        self.scan_string("}");
     }
 
     fn expr_yield(&mut self, expr: &ExprYield) {
         self.outer_attrs(&expr.attrs);
-        self.word("yield");
+        self.scan_string("yield");
         if let Some(value) = &expr.expr {
             self.nbsp();
             self.expr(value);
@@ -825,29 +826,29 @@ impl Engine {
 
     fn label(&mut self, label: &Label) {
         self.lifetime(&label.name);
-        self.word(": ");
+        self.scan_string(": ");
     }
 
     fn field_value(&mut self, field_value: &FieldValue) {
         self.outer_attrs(&field_value.attrs);
         self.member(&field_value.member);
         if field_value.colon_token.is_some() {
-            self.word(": ");
-            self.ibox(0);
+            self.scan_string(": ");
+            self.scan_begin_iconsistent(0);
             self.expr(&field_value.expr);
-            self.end();
+            self.scan_end();
         }
     }
 
     fn arm(&mut self, arm: &Arm) {
         self.outer_attrs(&arm.attrs);
-        self.ibox(0);
+        self.scan_begin_iconsistent(0);
         self.pat(&arm.pat);
         if let Some((_if_token, guard)) = &arm.guard {
-            self.word(" if ");
+            self.scan_string(" if ");
             self.expr(guard);
         }
-        self.word(" =>");
+        self.scan_string(" =>");
         let empty_block;
         let mut body = &*arm.body;
         while let Expr::Block(expr) = body {
@@ -878,22 +879,22 @@ impl Engine {
             if let Some(label) = &body.label {
                 self.label(label);
             }
-            self.word("{");
+            self.scan_string("{");
             self.neverbreak();
-            self.cbox(INDENT);
+            self.scan_begin_consistent(INDENT);
             self.hardbreak_if_nonempty();
             self.inner_attrs(&body.attrs);
             for stmt in &body.block.stmts {
                 self.stmt(stmt);
             }
             self.offset(-INDENT);
-            self.end();
-            self.word("}");
-            self.end();
+            self.scan_end();
+            self.scan_string("}");
+            self.scan_end();
         } else {
             self.nbsp();
             self.neverbreak();
-            self.cbox(INDENT);
+            self.scan_begin_consistent(INDENT);
             self.scan_break(BreakToken {
                 pre_break: Some('{'),
                 ..BreakToken::default()
@@ -906,8 +907,8 @@ impl Engine {
                 no_break: requires_terminator(body).then(|| ','),
                 ..BreakToken::default()
             });
-            self.end();
-            self.end();
+            self.scan_end();
+            self.scan_end();
         }
     }
 
@@ -918,28 +919,28 @@ impl Engine {
                 self.expr(expr);
             }
             _ => {
-                self.cbox(INDENT);
+                self.scan_begin_consistent(INDENT);
                 self.zerobreak();
                 for arg in args.iter().delimited() {
                     self.expr(&arg);
                     self.trailing_comma(arg.is_last);
                 }
                 self.offset(-INDENT);
-                self.end();
+                self.scan_end();
             }
         }
     }
 
     pub fn small_block(&mut self, block: &Block, attrs: &[Attribute]) {
-        self.word("{");
+        self.scan_string("{");
         if attr::has_inner(attrs) || !block.stmts.is_empty() {
             self.space();
             self.inner_attrs(attrs);
             match block.stmts.as_slice() {
                 [Stmt::Expr(expr, None)] if stmt::break_after(expr) => {
-                    self.ibox(0);
+                    self.scan_begin_iconsistent(0);
                     self.expr_beginning_of_line(expr, true);
-                    self.end();
+                    self.scan_end();
                     self.space();
                 }
                 _ => {
@@ -950,7 +951,7 @@ impl Engine {
             }
             self.offset(-INDENT);
         }
-        self.word("}");
+        self.scan_string("}");
     }
 
     pub fn member(&mut self, member: &Member) {
@@ -961,11 +962,11 @@ impl Engine {
     }
 
     fn index(&mut self, member: &Index) {
-        self.word(member.index.to_string());
+        self.scan_string(member.index.to_string());
     }
 
     fn binary_operator(&mut self, op: &BinOp) {
-        self.word(
+        self.scan_string(
             match op {
                 #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
                 BinOp::Add(_) => "+",
@@ -1002,7 +1003,7 @@ impl Engine {
     }
 
     fn unary_operator(&mut self, op: &UnOp) {
-        self.word(
+        self.scan_string(
             match op {
                 #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
                 UnOp::Deref(_) => "*",

@@ -1,17 +1,14 @@
-use super::token::*;
+// Adapted from https://github.com/rust-lang/rust/blob/1.57.0/compiler/rustc_ast_pretty/src/pp.rs.
+// See "Algorithm notes" in the crate-level rustdoc.
+// https://doc.rust-lang.org/stable/nightly-rustc/rustc_ast_pretty/pp/index.html
+use tracing::trace;
 
-use crate::ring::RingBuffer;
+use crate::model::*;
 use crate::{MARGIN, MIN_SPACE};
 use std::borrow::Cow;
-use std::cmp;
 use std::collections::VecDeque;
 use std::iter;
-
-#[derive(Copy, Clone)]
-enum PrintFrame {
-    Fits(Break),
-    Broken(usize, Break),
-}
+use std::{cmp, fmt};
 
 pub(crate) const SIZE_INFINITY: isize = 0xffff;
 
@@ -57,7 +54,7 @@ pub struct Engine {
     space: isize,
 
     /// Ring-buffer of tokens and calculated sizes
-    buf: RingBuffer<BufEntry>,
+    scan_buf: RingBuffer<BufEntry>,
 
     /// Total size of tokens already printed
     left_total: isize,
@@ -87,7 +84,7 @@ impl Engine {
         Self {
             out: String::new(),
             space: MARGIN,
-            buf: RingBuffer::new(),
+            scan_buf: RingBuffer::new(),
             left_total: 0,
             right_total: 0,
             scan_stack: VecDeque::new(),
@@ -105,29 +102,37 @@ impl Engine {
         self.out
     }
 
+    /// Scan begin pushes a BeginToken onto the scan buffer and sets up the scan stack.
     pub fn scan_begin(&mut self, token: BeginToken) {
+        trace!("Scan begin: {:?}", token);
+
         if self.scan_stack.is_empty() {
+            trace!("scan stack is empty");
             self.left_total = 1;
             self.right_total = 1;
-            self.buf.clear();
+            self.scan_buf.clear();
         }
-        let right = self.buf.push(BufEntry {
+        let right = self.scan_buf.push(BufEntry {
             token: Token::Begin(token),
             size: -self.right_total,
         });
         self.scan_stack.push_back(right);
+
+        self.debug_dump();
     }
 
     pub fn scan_end(&mut self) {
+        trace!("Scan end");
+
         if self.scan_stack.is_empty() {
             self.print_end();
         } else {
-            if !self.buf.is_empty() {
-                if let Token::Break(break_token) = self.buf.last().token {
-                    if self.buf.len() >= 2 {
-                        if let Token::Begin(_) = self.buf.second_last().token {
-                            self.buf.pop_last();
-                            self.buf.pop_last();
+            if !self.scan_buf.is_empty() {
+                if let Token::Break(break_token) = self.scan_buf.last().token {
+                    if self.scan_buf.len() >= 2 {
+                        if let Token::Begin(_) = self.scan_buf.second_last().token {
+                            self.scan_buf.pop_last();
+                            self.scan_buf.pop_last();
                             self.scan_stack.pop_back();
                             self.scan_stack.pop_back();
                             self.right_total -= break_token.blank_space as isize;
@@ -135,13 +140,13 @@ impl Engine {
                         }
                     }
                     if break_token.if_nonempty {
-                        self.buf.pop_last();
+                        self.scan_buf.pop_last();
                         self.scan_stack.pop_back();
                         self.right_total -= break_token.blank_space as isize;
                     }
                 }
             }
-            let right = self.buf.push(BufEntry {
+            let right = self.scan_buf.push(BufEntry {
                 token: Token::End,
                 size: -1,
             });
@@ -153,11 +158,11 @@ impl Engine {
         if self.scan_stack.is_empty() {
             self.left_total = 1;
             self.right_total = 1;
-            self.buf.clear();
+            self.scan_buf.clear();
         } else {
             self.check_stack(0);
         }
-        let right = self.buf.push(BufEntry {
+        let right = self.scan_buf.push(BufEntry {
             token: Token::Break(token),
             size: -self.right_total,
         });
@@ -165,12 +170,15 @@ impl Engine {
         self.right_total += token.blank_space as isize;
     }
 
-    pub fn scan_string(&mut self, string: Cow<'static, str>) {
+    //pub fn scan_string(&mut self, string: Cow<'static, str>) {
+    pub fn scan_string<S: Into<Cow<'static, str>>>(&mut self, string: S) {
+        let string = string.into();
+
         if self.scan_stack.is_empty() {
             self.print_string(string);
         } else {
             let len = string.len() as isize;
-            self.buf.push(BufEntry {
+            self.scan_buf.push(BufEntry {
                 token: Token::String(string),
                 size: len,
             });
@@ -180,7 +188,7 @@ impl Engine {
     }
 
     pub fn offset(&mut self, offset: isize) {
-        match &mut self.buf.last_mut().token {
+        match &mut self.scan_buf.last_mut().token {
             Token::Break(token) => token.offset += offset,
             Token::Begin(_) => {}
             Token::String(_) | Token::End => unreachable!(),
@@ -190,7 +198,7 @@ impl Engine {
     pub fn end_with_max_width(&mut self, max: isize) {
         let mut depth = 1;
         for &index in self.scan_stack.iter().rev() {
-            let entry = &self.buf[index];
+            let entry = &self.scan_buf[index];
             match entry.token {
                 Token::Begin(_) => {
                     depth -= 1;
@@ -198,7 +206,7 @@ impl Engine {
                         if entry.size < 0 {
                             let actual_width = entry.size + self.right_total;
                             if actual_width > max {
-                                self.buf.push(BufEntry {
+                                self.scan_buf.push(BufEntry {
                                     token: Token::String(Cow::Borrowed("")),
                                     size: SIZE_INFINITY,
                                 });
@@ -218,22 +226,22 @@ impl Engine {
 
     fn check_stream(&mut self) {
         while self.right_total - self.left_total > self.space {
-            if *self.scan_stack.front().unwrap() == self.buf.index_of_first() {
+            if *self.scan_stack.front().unwrap() == self.scan_buf.index_of_first() {
                 self.scan_stack.pop_front().unwrap();
-                self.buf.first_mut().size = SIZE_INFINITY;
+                self.scan_buf.first_mut().size = SIZE_INFINITY;
             }
 
             self.advance_left();
 
-            if self.buf.is_empty() {
+            if self.scan_buf.is_empty() {
                 break;
             }
         }
     }
 
     fn advance_left(&mut self) {
-        while self.buf.first().size >= 0 {
-            let left = self.buf.pop_first();
+        while self.scan_buf.first().size >= 0 {
+            let left = self.scan_buf.pop_first();
 
             match left.token {
                 Token::String(string) => {
@@ -248,7 +256,7 @@ impl Engine {
                 Token::End => self.print_end(),
             }
 
-            if self.buf.is_empty() {
+            if self.scan_buf.is_empty() {
                 break;
             }
         }
@@ -256,7 +264,7 @@ impl Engine {
 
     fn check_stack(&mut self, mut depth: usize) {
         while let Some(&index) = self.scan_stack.back() {
-            let entry = &mut self.buf[index];
+            let entry = &mut self.scan_buf[index];
             match entry.token {
                 Token::Begin(_) => {
                     if depth == 0 {
@@ -379,5 +387,44 @@ impl Engine {
         self.out
             .extend(iter::repeat(' ').take(self.pending_indentation));
         self.pending_indentation = 0;
+    }
+}
+
+impl fmt::Display for Engine {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Engine {{")?;
+        writeln!(f, "  out: {}", self.out)?;
+        writeln!(f, "  space: {}", self.space)?;
+
+        // Convert self.buf to debug string, split on newline, indent each line, and rejoin
+        let buf = format!("{}", self.scan_buf);
+        writeln!(
+            f,
+            "{}",
+            buf.lines()
+                .map(|line| format!("  {}", line))
+                .collect::<Vec<String>>()
+                .join("\n")
+        )?;
+
+        writeln!(f, "  left_total: {}", self.left_total)?;
+        writeln!(f, "  right_total: {}", self.right_total)?;
+        writeln!(f, "  scan_stack: {:?}", self.scan_stack)?;
+        writeln!(f, "  print_stack: {:?}", self.print_stack)?;
+        writeln!(f, "  indent: {}", self.indent)?;
+        writeln!(f, "  pending_indentation: {}", self.pending_indentation)?;
+        writeln!(f, "}}")?;
+
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_engine() {
+        //
     }
 }

@@ -1,28 +1,22 @@
-use crate::algorithm::{self, BeginToken, Break, BreakToken, Engine};
+use crate::engine::{Engine, SIZE_INFINITY};
+use crate::model::{BeginToken, Break, BreakToken};
 use std::borrow::Cow;
 
 impl Engine {
-    pub fn ibox(&mut self, indent: isize) {
+    /// Scan start with inconsistent breaks and the given indent for subsequent lines
+    pub fn scan_begin_iconsistent(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
             breaks: Break::Inconsistent,
         });
     }
 
-    pub fn cbox(&mut self, indent: isize) {
+    /// Scan start with consistent breaks and the given indent for subsequent lines
+    pub fn scan_begin_consistent(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
             breaks: Break::Consistent,
         });
-    }
-
-    pub fn end(&mut self) {
-        self.scan_end();
-    }
-
-    pub fn word<S: Into<Cow<'static, str>>>(&mut self, wrd: S) {
-        let s = wrd.into();
-        self.scan_string(s);
     }
 
     fn spaces(&mut self, n: usize) {
@@ -40,13 +34,13 @@ impl Engine {
         self.spaces(1);
     }
 
-    /// Add a single space to the output
+    /// Add a single space to the buffer
     pub fn nbsp(&mut self) {
-        self.word(" ");
+        self.scan_string(" ");
     }
 
     pub fn hardbreak(&mut self) {
-        self.spaces(algorithm::SIZE_INFINITY as usize);
+        self.spaces(SIZE_INFINITY as usize);
     }
 
     pub fn space_if_nonempty(&mut self) {
@@ -59,7 +53,7 @@ impl Engine {
 
     pub fn hardbreak_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
-            blank_space: algorithm::SIZE_INFINITY as usize,
+            blank_space: SIZE_INFINITY as usize,
             if_nonempty: true,
             ..BreakToken::default()
         });
@@ -72,7 +66,7 @@ impl Engine {
                 ..BreakToken::default()
             });
         } else {
-            self.word(",");
+            self.scan_string(",");
             self.space();
         }
     }
@@ -85,7 +79,7 @@ impl Engine {
                 ..BreakToken::default()
             });
         } else {
-            self.word(",");
+            self.scan_string(",");
             self.space();
         }
     }

@@ -1,4 +1,4 @@
-use crate::algorithm::Engine;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
 use crate::INDENT;
@@ -34,11 +34,11 @@ impl Engine {
     }
 
     fn type_array(&mut self, ty: &TypeArray) {
-        self.word("[");
+        self.scan_string("[");
         self.ty(&ty.elem);
-        self.word("; ");
+        self.scan_string("; ");
         self.expr(&ty.len);
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn type_bare_fn(&mut self, ty: &TypeBareFn) {
@@ -46,13 +46,13 @@ impl Engine {
             self.bound_lifetimes(bound_lifetimes);
         }
         if ty.unsafety.is_some() {
-            self.word("unsafe ");
+            self.scan_string("unsafe ");
         }
         if let Some(abi) = &ty.abi {
             self.abi(abi);
         }
-        self.word("fn(");
-        self.cbox(INDENT);
+        self.scan_string("fn(");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for bare_fn_arg in ty.inputs.iter().delimited() {
             self.bare_fn_arg(&bare_fn_arg);
@@ -63,8 +63,8 @@ impl Engine {
             self.zerobreak();
         }
         self.offset(-INDENT);
-        self.end();
-        self.word(")");
+        self.scan_end();
+        self.scan_string(")");
         self.return_type(&ty.output);
     }
 
@@ -73,10 +73,10 @@ impl Engine {
     }
 
     fn type_impl_trait(&mut self, ty: &TypeImplTrait) {
-        self.word("impl ");
+        self.scan_string("impl ");
         for type_param_bound in ty.bounds.iter().delimited() {
             if !type_param_bound.is_first {
-                self.word(" + ");
+                self.scan_string(" + ");
             }
             self.type_param_bound(&type_param_bound);
         }
@@ -84,7 +84,7 @@ impl Engine {
 
     fn type_infer(&mut self, ty: &TypeInfer) {
         let _ = ty;
-        self.word("_");
+        self.scan_string("_");
     }
 
     fn type_macro(&mut self, ty: &TypeMacro) {
@@ -94,13 +94,13 @@ impl Engine {
 
     fn type_never(&mut self, ty: &TypeNever) {
         let _ = ty;
-        self.word("!");
+        self.scan_string("!");
     }
 
     fn type_paren(&mut self, ty: &TypeParen) {
-        self.word("(");
+        self.scan_string("(");
         self.ty(&ty.elem);
-        self.word(")");
+        self.scan_string(")");
     }
 
     fn type_path(&mut self, ty: &TypePath) {
@@ -108,59 +108,59 @@ impl Engine {
     }
 
     fn type_ptr(&mut self, ty: &TypePtr) {
-        self.word("*");
+        self.scan_string("*");
         if ty.mutability.is_some() {
-            self.word("mut ");
+            self.scan_string("mut ");
         } else {
-            self.word("const ");
+            self.scan_string("const ");
         }
         self.ty(&ty.elem);
     }
 
     fn type_reference(&mut self, ty: &TypeReference) {
-        self.word("&");
+        self.scan_string("&");
         if let Some(lifetime) = &ty.lifetime {
             self.lifetime(lifetime);
             self.nbsp();
         }
         if ty.mutability.is_some() {
-            self.word("mut ");
+            self.scan_string("mut ");
         }
         self.ty(&ty.elem);
     }
 
     fn type_slice(&mut self, ty: &TypeSlice) {
-        self.word("[");
+        self.scan_string("[");
         self.ty(&ty.elem);
-        self.word("]");
+        self.scan_string("]");
     }
 
     fn type_trait_object(&mut self, ty: &TypeTraitObject) {
-        self.word("dyn ");
+        self.scan_string("dyn ");
         for type_param_bound in ty.bounds.iter().delimited() {
             if !type_param_bound.is_first {
-                self.word(" + ");
+                self.scan_string(" + ");
             }
             self.type_param_bound(&type_param_bound);
         }
     }
 
     fn type_tuple(&mut self, ty: &TypeTuple) {
-        self.word("(");
-        self.cbox(INDENT);
+        self.scan_string("(");
+        self.scan_begin_consistent(INDENT);
         self.zerobreak();
         for elem in ty.elems.iter().delimited() {
             self.ty(&elem);
             if ty.elems.len() == 1 {
-                self.word(",");
+                self.scan_string(",");
                 self.zerobreak();
             } else {
                 self.trailing_comma(elem.is_last);
             }
         }
         self.offset(-INDENT);
-        self.end();
-        self.word(")");
+        self.scan_end();
+        self.scan_string(")");
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -250,52 +250,52 @@ impl Engine {
 
         match ty {
             TypeVerbatim::Ellipsis => {
-                self.word("...");
+                self.scan_string("...");
             }
             TypeVerbatim::AnonStruct(ty) => {
                 self.cbox(INDENT);
-                self.word("struct {");
+                self.scan_string("struct {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {
                     self.field(field);
-                    self.word(",");
+                    self.scan_string(",");
                     self.hardbreak();
                 }
                 self.offset(-INDENT);
-                self.end();
-                self.word("}");
+                self.scan_end();
+                self.scan_string("}");
             }
             TypeVerbatim::AnonUnion(ty) => {
                 self.cbox(INDENT);
-                self.word("union {");
+                self.scan_string("union {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {
                     self.field(field);
-                    self.word(",");
+                    self.scan_string(",");
                     self.hardbreak();
                 }
                 self.offset(-INDENT);
-                self.end();
-                self.word("}");
+                self.scan_end();
+                self.scan_string("}");
             }
             TypeVerbatim::DynStar(ty) => {
-                self.word("dyn* ");
+                self.scan_string("dyn* ");
                 for type_param_bound in ty.bounds.iter().delimited() {
                     if !type_param_bound.is_first {
-                        self.word(" + ");
+                        self.scan_string(" + ");
                     }
                     self.type_param_bound(&type_param_bound);
                 }
             }
             TypeVerbatim::MutSelf(bare_fn_arg) => {
-                self.word("mut self");
+                self.scan_string("mut self");
                 if let Some(ty) = &bare_fn_arg.ty {
-                    self.word(": ");
+                    self.scan_string(": ");
                     self.ty(ty);
                 }
             }
             TypeVerbatim::NotType(ty) => {
-                self.word("!");
+                self.scan_string("!");
                 self.ty(&ty.inner);
             }
         }
@@ -305,7 +305,7 @@ impl Engine {
         match ty {
             ReturnType::Default => {}
             ReturnType::Type(_arrow, ty) => {
-                self.word(" -> ");
+                self.scan_string(" -> ");
                 self.ty(ty);
             }
         }
@@ -315,7 +315,7 @@ impl Engine {
         self.outer_attrs(&bare_fn_arg.attrs);
         if let Some((name, _colon)) = &bare_fn_arg.name {
             self.ident(name);
-            self.word(": ");
+            self.scan_string(": ");
         }
         self.ty(&bare_fn_arg.ty);
     }
@@ -324,13 +324,13 @@ impl Engine {
         self.outer_attrs(&variadic.attrs);
         if let Some((name, _colon)) = &variadic.name {
             self.ident(name);
-            self.word(": ");
+            self.scan_string(": ");
         }
-        self.word("...");
+        self.scan_string("...");
     }
 
     pub fn abi(&mut self, abi: &Abi) {
-        self.word("extern ");
+        self.scan_string("extern ");
         if let Some(name) = &abi.name {
             self.lit_str(name);
             self.nbsp();

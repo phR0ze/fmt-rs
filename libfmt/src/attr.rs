@@ -1,5 +1,5 @@
-use crate::algorithm::Engine;
 use crate::path::PathKind;
+use crate::Engine;
 use crate::INDENT;
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use syn::{AttrStyle, Attribute, Expr, Lit, MacroDelimiter, Meta, MetaList, MetaNameValue};
@@ -30,11 +30,11 @@ impl Engine {
                 }
             {
                 trim_trailing_spaces(&mut doc);
-                self.word(match attr.style {
+                self.scan_string(match attr.style {
                     AttrStyle::Outer => "///",
                     AttrStyle::Inner(_) => "//!",
                 });
-                self.word(doc);
+                self.scan_string(doc);
                 self.hardbreak();
                 return;
             } else if can_be_block_comment(&doc)
@@ -44,39 +44,39 @@ impl Engine {
                 }
             {
                 trim_interior_trailing_spaces(&mut doc);
-                self.word(match attr.style {
+                self.scan_string(match attr.style {
                     AttrStyle::Outer => "/**",
                     AttrStyle::Inner(_) => "/*!",
                 });
-                self.word(doc);
-                self.word("*/");
+                self.scan_string(doc);
+                self.scan_string("*/");
                 self.hardbreak();
                 return;
             }
         } else if let Some(mut comment) = value_of_attribute("comment", attr) {
             if !comment.contains('\n') {
                 trim_trailing_spaces(&mut comment);
-                self.word("//");
-                self.word(comment);
+                self.scan_string("//");
+                self.scan_string(comment);
                 self.hardbreak();
                 return;
             } else if can_be_block_comment(&comment) && !comment.starts_with(&['*', '!'][..]) {
                 trim_interior_trailing_spaces(&mut comment);
-                self.word("/*");
-                self.word(comment);
-                self.word("*/");
+                self.scan_string("/*");
+                self.scan_string(comment);
+                self.scan_string("*/");
                 self.hardbreak();
                 return;
             }
         }
 
-        self.word(match attr.style {
+        self.scan_string(match attr.style {
             AttrStyle::Outer => "#",
             AttrStyle::Inner(_) => "#!",
         });
-        self.word("[");
+        self.scan_string("[");
         self.meta(&attr.meta);
-        self.word("]");
+        self.scan_string("]");
         self.space();
     }
 
@@ -101,7 +101,7 @@ impl Engine {
 
     fn meta_name_value(&mut self, meta: &MetaNameValue) {
         self.path(&meta.path, PathKind::Simple);
-        self.word(" = ");
+        self.scan_string(" = ");
         self.expr(&meta.value);
     }
 
@@ -159,17 +159,17 @@ impl Engine {
                     let stream = group.stream();
                     match delimiter {
                         Delimiter::Parenthesis => {
-                            self.word("(");
-                            self.cbox(INDENT);
+                            self.scan_string("(");
+                            self.scan_begin_consistent(INDENT);
                             self.zerobreak();
                             state = Punct;
                         }
                         Delimiter::Brace => {
-                            self.word("{");
+                            self.scan_string("{");
                             state = Punct;
                         }
                         Delimiter::Bracket => {
-                            self.word("[");
+                            self.scan_string("[");
                             state = Punct;
                         }
                         Delimiter::None => {}
@@ -184,16 +184,16 @@ impl Engine {
                                 self.zerobreak();
                             }
                             self.offset(-INDENT);
-                            self.end();
-                            self.word(")");
+                            self.scan_end();
+                            self.scan_string(")");
                             state = Punct;
                         }
                         Delimiter::Brace => {
-                            self.word("}");
+                            self.scan_string("}");
                             state = Punct;
                         }
                         Delimiter::Bracket => {
-                            self.word("]");
+                            self.scan_string("]");
                             state = Punct;
                         }
                         Delimiter::None => {}
