@@ -21,4 +21,10 @@ exclude = [
 ]
 
 [dependencies]
+proc-macro2 = { version = "1.0.80", default-features = false }
 syn = { version = "2.0.76", default-features = false, features = ["full"] }
+
+[dev-dependencies]
+indoc = "2"
+quote = { version = "1.0.35", default-features = false }
+syn = { version = "2.0.76", default-features = false, features = ["parsing"] }
