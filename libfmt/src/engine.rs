@@ -18,7 +18,7 @@ pub(crate) const SIZE_INFINITY: isize = 0xffff;
 /// and tokens are multi-char, but in the worst case every token worth buffering is 1 char long, so
 /// it’s ok.
 ///
-/// Tokens are String, Break, and Begin/End to delimit blocks.
+/// Tokens are String, Break, and Begin/End to delimit block.
 ///
 /// Tokens are buffered through the RingBuffer. The ‘left’ and ‘right’ indices denote the active
 /// portion of the ring buffer as well as describing hypothetical points-in-the-infinite-stream at
@@ -50,32 +50,37 @@ pub struct Engine {
     /// Final formatted output
     out: String,
 
-    /// Number of spaces left on line
+    /// Used to track how much of the max line width is still available. As characters are printed,
+    /// this value is decremented.
     space: isize,
 
-    /// Ring-buffer of tokens and calculated sizes
+    /// Ring buffer of tokens and calculated size of strings i.e. number of characters
     scan_buf: RingBuffer<BufEntry>,
 
-    /// Total size of tokens already printed
+    /// Tracks the total size (i.e. number of characters) of tokens that have been printed from the
+    /// ring buffer.
+    /// Always starts at 1
     left_total: isize,
 
-    /// Total size of tokens enqueued, including printed and not yet printed
+    /// Tracks the total size (i.e. number of characters) of tokens that have been enqueued in the
+    /// ring buffer.
+    /// Always starts at 1
     right_total: isize,
 
-    /// Holds the ring-buffer index of the Begin that started the current block,
-    /// possibly with the most recent Break after that Begin (if there is any) on
-    /// top of it. Values are pushed and popped on the back of the queue using it
-    /// like stack, and elsewhere old values are popped from the front of the
-    /// queue as they become irrelevant due to the primary ring-buffer advancing.
+    /// Tracks the current block being scanned. Holds ring-buffer index values of the Begin that
+    /// started the current block, possibly with the most recent Break after that Begin (if there is
+    /// any) on top of it. Values are pushed and popped on the back of the queue using it like
+    /// stack, and elsewhere old values are popped from the front of the queue as they become
+    /// irrelevant due to the primary ring-buffer advancing.
     scan_stack: VecDeque<usize>,
 
-    /// Stack of blocks-in-progress being flushed by print
+    /// Stack of blocks-in-progress being flushed by print methods
     print_stack: Vec<PrintFrame>,
 
-    /// Level of indentation of current line
+    /// Print related field for level of indentation of current line
     indent: usize,
 
-    /// Buffered indentation to avoid writing trailing whitespace
+    /// Print related field for indentation to avoid writing trailing whitespace
     pending_indentation: usize,
 }
 
@@ -97,17 +102,18 @@ impl Engine {
     pub fn eof(mut self) -> String {
         if !self.scan_stack.is_empty() {
             self.check_stack(0);
-            self.advance_left();
+            self.print_next();
         }
         self.out
     }
 
-    /// Scan begin pushes a BeginToken onto the scan buffer and sets up the scan stack.
+    /// Marks the beginning of a block of code by pushing a BeginToken onto the scan buffer and
+    /// tracks it's index on the scan stack.
+    /// * Used for: Start, Open Paren, Open Brace, Open Bracket, async, etc...
     pub fn scan_begin(&mut self, token: BeginToken) {
         trace!("Scan begin: {:?}", token);
 
         if self.scan_stack.is_empty() {
-            trace!("scan stack is empty");
             self.left_total = 1;
             self.right_total = 1;
             self.scan_buf.clear();
@@ -121,6 +127,9 @@ impl Engine {
         self.debug_dump();
     }
 
+    /// Marks the end of a block of code by pushing an End token onto the scan buffer and tracks it's
+    /// index on the scan stack.
+    /// * Used for: End, Close Paren, Close Brace, Close Bracket, etc...
     pub fn scan_end(&mut self) {
         trace!("Scan end");
 
@@ -152,9 +161,16 @@ impl Engine {
             });
             self.scan_stack.push_back(right);
         }
+
+        self.debug_dump();
     }
 
+    /// Marks a break in the code by pushing a BreakToken onto the scan buffer and tracks it's index
+    /// on the scan stack.
+    /// * Used for: Comma, Semicolon, etc...
     pub fn scan_break(&mut self, token: BreakToken) {
+        trace!("Scan break: {:?}", token);
+
         if self.scan_stack.is_empty() {
             self.left_total = 1;
             self.right_total = 1;
@@ -168,34 +184,58 @@ impl Engine {
         });
         self.scan_stack.push_back(right);
         self.right_total += token.blank_space as isize;
+
+        self.debug_dump();
     }
 
-    //pub fn scan_string(&mut self, string: Cow<'static, str>) {
+    /// Push a string onto the scan buffer or simply print it to out if there is no begin in progress.
     pub fn scan_string<S: Into<Cow<'static, str>>>(&mut self, string: S) {
         let string = string.into();
+        trace!("Scan string: {:?}", string);
 
         if self.scan_stack.is_empty() {
             self.print_string(string);
         } else {
+            // Store the string and its length in the scan buffer
             let len = string.len() as isize;
             self.scan_buf.push(BufEntry {
                 token: Token::String(string),
                 size: len,
             });
+
+            // Update the total string length to include the new string
             self.right_total += len;
-            self.check_stream();
+
+            // Check the string stream to see if it
+            self.print_if_past_max_line_width();
         }
+
+        self.debug_dump();
     }
 
+    /// Update the previous break to include the detected offset change.
     pub fn offset(&mut self, offset: isize) {
+        trace!("Offset: {:?}", offset);
+
         match &mut self.scan_buf.last_mut().token {
+            // Update the previous break to include detected offset change
             Token::Break(token) => token.offset += offset,
+
+            // Nothing to do here
             Token::Begin(_) => {}
+
+            // The algorithm should never reach this point as there will always be a break or begin
+            // token present if `offset` is being called.
             Token::String(_) | Token::End => unreachable!(),
         }
+
+        self.debug_dump();
     }
 
+    /// ?
     pub fn end_with_max_width(&mut self, max: isize) {
+        trace!("End with max width: {:?}", max);
+
         let mut depth = 1;
         for &index in self.scan_stack.iter().rev() {
             let entry = &self.scan_buf[index];
@@ -224,14 +264,22 @@ impl Engine {
         self.scan_end();
     }
 
-    fn check_stream(&mut self) {
+    /// Print the current block of code to the output string if the max line width threshold has
+    /// been exceeded.
+    fn print_if_past_max_line_width(&mut self) {
+        trace!("Print if past max line width");
+
+        // While the current stream is longer than the allowed max width
         while self.right_total - self.left_total > self.space {
+            // Pop the first element from the scan stack if it is also the first
+            // element in the scan buffer, then update the scan buffer element's size to infinity.
             if *self.scan_stack.front().unwrap() == self.scan_buf.index_of_first() {
                 self.scan_stack.pop_front().unwrap();
                 self.scan_buf.first_mut().size = SIZE_INFINITY;
             }
 
-            self.advance_left();
+            // Now print out all tokens until a control token of negative size is encountered
+            self.print_next();
 
             if self.scan_buf.is_empty() {
                 break;
@@ -239,7 +287,11 @@ impl Engine {
         }
     }
 
-    fn advance_left(&mut self) {
+    /// Prints any token of zero or positive size until a control token of negative size is
+    /// encountered. Also updates the left_total field to track the printed characters.
+    fn print_next(&mut self) {
+        trace!("Print next");
+
         while self.scan_buf.first().size >= 0 {
             let left = self.scan_buf.pop_first();
 
@@ -260,9 +312,13 @@ impl Engine {
                 break;
             }
         }
+
+        self.debug_dump();
     }
 
     fn check_stack(&mut self, mut depth: usize) {
+        trace!("Check stack");
+
         while let Some(&index) = self.scan_stack.back() {
             let entry = &mut self.scan_buf[index];
             match entry.token {
@@ -289,6 +345,8 @@ impl Engine {
                 Token::String(_) => unreachable!(),
             }
         }
+
+        self.debug_dump();
     }
 
     fn get_top(&self) -> PrintFrame {
@@ -297,6 +355,8 @@ impl Engine {
     }
 
     fn print_begin(&mut self, token: BeginToken, size: isize) {
+        trace!("Print begin");
+
         if cfg!(prettyplease_debug) {
             self.out.push(match token.breaks {
                 Break::Consistent => '«',
@@ -322,6 +382,8 @@ impl Engine {
     }
 
     fn print_end(&mut self) {
+        trace!("Print end");
+
         let breaks = match self.print_stack.pop().unwrap() {
             PrintFrame::Broken(indent, breaks) => {
                 self.indent = indent;
@@ -335,9 +397,13 @@ impl Engine {
                 Break::Inconsistent => '›',
             });
         }
+
+        trace!("Print end (out): {}", self.out);
     }
 
     fn print_break(&mut self, token: BreakToken, size: isize) {
+        trace!("Print break: {:?}", token);
+
         let fits = token.never_break
             || match self.get_top() {
                 PrintFrame::Fits(..) => true,
@@ -372,21 +438,31 @@ impl Engine {
                 self.space -= post_break.len_utf8() as isize;
             }
         }
+
+        trace!("Print break (out): {}", self.out);
     }
 
     /// Print the given value including any indent to the output String
     fn print_string(&mut self, value: Cow<'static, str>) {
+        trace!("Print string: {}", value);
+
         self.print_indent();
         self.out.push_str(&value);
         self.space -= value.len() as isize;
+
+        trace!("Print string (out): {}", self.out);
     }
 
     /// Print indentation spaces to the output String
     fn print_indent(&mut self) {
+        trace!("Print indent");
+
         self.out.reserve(self.pending_indentation);
         self.out
             .extend(iter::repeat(' ').take(self.pending_indentation));
         self.pending_indentation = 0;
+
+        trace!("Print indent (out): {}", self.out);
     }
 }
 

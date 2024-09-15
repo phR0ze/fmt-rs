@@ -1,6 +1,5 @@
 use crate::engine::{Engine, SIZE_INFINITY};
 use crate::model::{BeginToken, Break, BreakToken};
-use std::borrow::Cow;
 
 impl Engine {
     /// Scan start with inconsistent breaks and the given indent for subsequent lines

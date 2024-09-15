@@ -11,10 +11,7 @@ fn main() -> Result<()> {
 
     // Pass in an example
     let tokens = quote! {
-        struct Foo {
-            a: i32,
-            b: i32,
-        }
+        println!("{}", "1",);
     };
     let syntax_tree: syn::File = syn::parse2(tokens).unwrap();
     libfmt::format_syn_file(&syntax_tree)?;

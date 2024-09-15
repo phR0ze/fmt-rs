@@ -8,7 +8,9 @@ use super::BufEntry;
 pub struct RingBuffer<T> {
     data: VecDeque<T>,
 
-    // Abstract index of data[0] in infinitely sized queue
+    // Allows for maintaining fixed index locations despite popping elements from
+    // the front of the buffer. When an element is popped the offset is updated
+    // to keep external references to buffer index locations valid.
     offset: usize,
 }
 
@@ -28,7 +30,8 @@ impl<T> RingBuffer<T> {
         self.data.len()
     }
 
-    /// Push the valut onto the end of the buffer and return the index of the value.
+    /// Push the value onto the end of the buffer and return the offset controlled
+    /// index of the value.
     pub fn push(&mut self, value: T) -> usize {
         let index = self.offset + self.data.len();
         self.data.push_back(value);
@@ -39,12 +42,12 @@ impl<T> RingBuffer<T> {
         self.data.clear();
     }
 
-    /// Get the index of the first element in the buffer.
+    /// Get the index of the first element in the buffer as controlled by the current offset.
     pub fn index_of_first(&self) -> usize {
         self.offset
     }
 
-    /// Get the value of the first element in the buffer.
+    /// Get the value of the first element in the buffer. Not controlled by offset.
     pub fn first(&self) -> &T {
         &self.data[0]
     }
@@ -53,6 +56,7 @@ impl<T> RingBuffer<T> {
         &mut self.data[0]
     }
 
+    // Return the first value and update the offset to maintain external index locations.
     pub fn pop_first(&mut self) -> T {
         self.offset += 1;
         self.data.pop_front().unwrap()
