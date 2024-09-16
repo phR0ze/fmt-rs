@@ -100,9 +100,11 @@ impl Engine {
     }
 
     pub fn eof(mut self) -> String {
+        trace!("EOF");
+
         if !self.scan_stack.is_empty() {
             self.check_stack(0);
-            self.print_next();
+            self.print_any();
         }
         self.out
     }
@@ -206,7 +208,6 @@ impl Engine {
             // Update the total string length to include the new string
             self.right_total += len;
 
-            // Check the string stream to see if it
             self.print_if_past_max_line_width();
         }
 
@@ -279,7 +280,7 @@ impl Engine {
             }
 
             // Now print out all tokens until a control token of negative size is encountered
-            self.print_next();
+            self.print_any();
 
             if self.scan_buf.is_empty() {
                 break;
@@ -287,35 +288,7 @@ impl Engine {
         }
     }
 
-    /// Prints any token of zero or positive size until a control token of negative size is
-    /// encountered. Also updates the left_total field to track the printed characters.
-    fn print_next(&mut self) {
-        trace!("Print next");
-
-        while self.scan_buf.first().size >= 0 {
-            let left = self.scan_buf.pop_first();
-
-            match left.token {
-                Token::String(string) => {
-                    self.left_total += left.size;
-                    self.print_string(string);
-                }
-                Token::Break(token) => {
-                    self.left_total += token.blank_space as isize;
-                    self.print_break(token, left.size);
-                }
-                Token::Begin(token) => self.print_begin(token, left.size),
-                Token::End => self.print_end(),
-            }
-
-            if self.scan_buf.is_empty() {
-                break;
-            }
-        }
-
-        self.debug_dump();
-    }
-
+    /// ?
     fn check_stack(&mut self, mut depth: usize) {
         trace!("Check stack");
 
@@ -343,6 +316,36 @@ impl Engine {
                     }
                 }
                 Token::String(_) => unreachable!(),
+            }
+        }
+
+        self.debug_dump();
+    }
+
+    /// Prints any token of zero or positive size. During print the control tokens that usually have
+    /// a negative size are updated to have a positive size such that print_next will consume them.
+    /// Also updates the left_total field to track the printed characters.
+    fn print_any(&mut self) {
+        trace!("Print any");
+
+        while self.scan_buf.first().size >= 0 {
+            let left = self.scan_buf.pop_first();
+
+            match left.token {
+                Token::String(string) => {
+                    self.left_total += left.size;
+                    self.print_string(string);
+                }
+                Token::Break(token) => {
+                    self.left_total += token.blank_space as isize;
+                    self.print_break(token, left.size);
+                }
+                Token::Begin(token) => self.print_begin(token, left.size),
+                Token::End => self.print_end(),
+            }
+
+            if self.scan_buf.is_empty() {
+                break;
             }
         }
 
@@ -447,10 +450,14 @@ impl Engine {
         trace!("Print string: {}", value);
 
         self.print_indent();
+
         self.out.push_str(&value);
         self.space -= value.len() as isize;
 
-        trace!("Print string (out): {}", self.out);
+        if !self.out.is_empty() {
+            trace!("Print stack: {:?}", self.print_stack);
+            trace!("Print string (out): {}", self.out);
+        }
     }
 
     /// Print indentation spaces to the output String

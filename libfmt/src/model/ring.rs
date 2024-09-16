@@ -47,7 +47,7 @@ impl<T> RingBuffer<T> {
         self.offset
     }
 
-    /// Get the value of the first element in the buffer. Not controlled by offset.
+    /// Get a reference to the first element in the buffer.
     pub fn first(&self) -> &T {
         &self.data[0]
     }
