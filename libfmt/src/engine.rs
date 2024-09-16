@@ -333,6 +333,9 @@ impl Engine {
 
             match left.token {
                 Token::String(string) => {
+                    if self.skip_trailing_comma(&string) {
+                        continue;
+                    }
                     self.left_total += left.size;
                     self.print_string(string);
                 }
@@ -350,6 +353,17 @@ impl Engine {
         }
 
         self.debug_dump();
+    }
+
+    /// If the given value is a comma and the scan buffer still has more tokens and the next token
+    /// is an End token, then skip the trailing comma.
+    fn skip_trailing_comma(&self, value: &str) -> bool {
+        if value == "," && !self.scan_buf.is_empty() {
+            if let Token::End = &self.scan_buf.first().token {
+                return true;
+            }
+        }
+        return false;
     }
 
     fn get_top(&self) -> PrintFrame {

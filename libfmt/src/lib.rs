@@ -173,4 +173,12 @@ mod tests {
             "#},
         );
     }
+
+    #[test]
+    fn test_drop_trailing_comma() {
+        let out = fmt(quote! {
+            println!("{}", "1",);
+        });
+        assert_eq!(out, "println!(\"{}\", \"1\");\n");
+    }
 }
