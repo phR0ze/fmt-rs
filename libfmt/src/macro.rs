@@ -51,7 +51,7 @@ impl Engine {
             //}
 
             // Scan the macro body
-            self.scan_begin_iconsistent(0);
+            self.scan_begin_inconsistent(0);
             self.macro_rules_tokens(mac.tokens.clone(), false);
             self.scan_end();
 
@@ -101,7 +101,7 @@ impl Engine {
                     if !stream.is_empty() {
                         self.scan_begin_consistent(INDENT);
                         self.zerobreak();
-                        self.scan_begin_iconsistent(0);
+                        self.scan_begin_inconsistent(0);
                         self.macro_rules_tokens(stream, true);
                         self.scan_end();
                         self.zerobreak();
@@ -125,7 +125,7 @@ impl Engine {
                     if !stream.is_empty() {
                         self.scan_begin_consistent(INDENT);
                         self.hardbreak();
-                        self.scan_begin_iconsistent(0);
+                        self.scan_begin_inconsistent(0);
                         self.macro_rules_tokens(stream, false);
                         self.scan_end();
                         self.hardbreak();
@@ -570,7 +570,7 @@ mod standard_library {
             match &known_macro {
                 KnownMacro::Expr(expr) => {
                     self.scan_string("(");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     self.expr(expr);
                     self.zerobreak();
@@ -580,7 +580,7 @@ mod standard_library {
                 }
                 KnownMacro::Exprs(exprs) => {
                     self.scan_string("(");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     for elem in exprs.iter().delimited() {
                         self.expr(&elem);
@@ -597,7 +597,7 @@ mod standard_library {
                 }
                 KnownMacro::Matches(matches) => {
                     self.scan_string("(");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     self.expr(&matches.expression);
                     self.scan_string(",");
@@ -615,11 +615,11 @@ mod standard_library {
                 }
                 KnownMacro::ThreadLocal(items) => {
                     self.scan_string(" {");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.hardbreak_if_nonempty();
                     for item in items {
                         self.outer_attrs(&item.attrs);
-                        self.cbox(0);
+                        self.scan_begin_consistent(0);
                         self.visibility(&item.vis);
                         self.scan_string("static ");
                         self.ident(&item.name);
@@ -639,7 +639,7 @@ mod standard_library {
                 }
                 KnownMacro::VecArray(vec) => {
                     self.scan_string("[");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     for elem in vec.iter().delimited() {
                         self.expr(&elem);
@@ -651,7 +651,7 @@ mod standard_library {
                 }
                 KnownMacro::VecRepeat { elem, n } => {
                     self.scan_string("[");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     self.expr(elem);
                     self.scan_string(";");
@@ -683,7 +683,7 @@ mod standard_library {
                 Cfg::Call(ident, args) => {
                     self.ident(ident);
                     self.scan_string("(");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
                     for arg in args.iter().delimited() {
                         self.cfg(&arg);

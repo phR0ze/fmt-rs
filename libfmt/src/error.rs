@@ -37,6 +37,12 @@ impl Error {
     }
 
     /// Add the given error as a source to this error.
+    pub(crate) fn wrap_lex(mut self, err: proc_macro2::LexError) -> Self {
+        self.source = Some(Box::new(err));
+        self
+    }
+
+    /// Add the given error as a source to this error.
     pub(crate) fn wrap_any(mut self, err: Box<dyn std::error::Error>) -> Self {
         self.source = Some(err);
         self

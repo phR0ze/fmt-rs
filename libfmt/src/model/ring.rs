@@ -95,8 +95,8 @@ impl<T> IndexMut<usize> for RingBuffer<T> {
 impl fmt::Display for RingBuffer<BufEntry> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "RingBuffer {{")?;
-        for i in 0..self.len() {
-            writeln!(f, "  [{}] = {:?}", i, &self[i])?;
+        for i in 0..self.data.len() {
+            writeln!(f, "  [{}] = {:?}", i, &self.data[i])?;
         }
         writeln!(f, "}}")?;
 

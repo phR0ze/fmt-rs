@@ -253,7 +253,7 @@ impl Engine {
                 self.scan_string("...");
             }
             TypeVerbatim::AnonStruct(ty) => {
-                self.cbox(INDENT);
+                self.scan_begin_consistent(INDENT);
                 self.scan_string("struct {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {
@@ -266,7 +266,7 @@ impl Engine {
                 self.scan_string("}");
             }
             TypeVerbatim::AnonUnion(ty) => {
-                self.cbox(INDENT);
+                self.scan_begin_consistent(INDENT);
                 self.scan_string("union {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {

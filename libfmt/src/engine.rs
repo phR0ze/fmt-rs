@@ -99,6 +99,7 @@ impl Engine {
         }
     }
 
+    /// Convert remaining scan buffer into an output string.
     pub fn eof(mut self) -> String {
         trace!("EOF");
 

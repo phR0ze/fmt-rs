@@ -7,7 +7,7 @@ impl Engine {
         match stmt {
             Stmt::Local(local) => {
                 self.outer_attrs(&local.attrs);
-                self.scan_begin_iconsistent(0);
+                self.scan_begin_inconsistent(0);
                 self.scan_string("let ");
                 self.pat(&local.pat);
                 if let Some(local_init) = &local.init {
@@ -26,7 +26,7 @@ impl Engine {
                         } else {
                             self.scan_string("{");
                             self.space();
-                            self.scan_begin_iconsistent(INDENT);
+                            self.scan_begin_inconsistent(INDENT);
                             self.expr(diverge);
                             self.scan_end();
                             self.space();
@@ -45,7 +45,7 @@ impl Engine {
             Stmt::Item(item) => self.item(item),
             Stmt::Expr(expr, None) => {
                 if break_after(expr) {
-                    self.scan_begin_iconsistent(0);
+                    self.scan_begin_inconsistent(0);
                     self.expr_beginning_of_line(expr, true);
                     if add_semi(expr) {
                         self.scan_string(";");
@@ -62,7 +62,7 @@ impl Engine {
                         return;
                     }
                 }
-                self.scan_begin_iconsistent(0);
+                self.scan_begin_inconsistent(0);
                 self.expr_beginning_of_line(expr, true);
                 if !remove_semi(expr) {
                     self.scan_string(";");

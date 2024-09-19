@@ -127,7 +127,7 @@ impl Engine {
     fn item_impl(&mut self, item: &ItemImpl) {
         self.outer_attrs(&item.attrs);
         self.scan_begin_consistent(INDENT);
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.scan_begin_consistent(INDENT);
         if item.defaultness.is_some() {
             self.scan_string("default ");
@@ -311,7 +311,7 @@ impl Engine {
         self.where_clause_oneline(&item.generics.where_clause);
         self.scan_string("= ");
         self.neverbreak();
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.ty(&item.ty);
         self.scan_end();
         self.scan_string(";");
@@ -588,9 +588,9 @@ impl Engine {
             }
             ItemVerbatim::ImplFlexible(item) => {
                 self.outer_attrs(&item.attrs);
-                self.cbox(INDENT);
-                self.ibox(-INDENT);
-                self.cbox(INDENT);
+                self.scan_begin_consistent(INDENT);
+                self.scan_begin_inconsistent(-INDENT);
+                self.scan_begin_consistent(INDENT);
                 self.visibility(&item.vis);
                 if item.defaultness {
                     self.scan_string("default ");
@@ -636,9 +636,9 @@ impl Engine {
                 self.ident(&item.ident);
                 if let Some(args) = &item.args {
                     self.scan_string("(");
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
-                    self.ibox(0);
+                    self.scan_begin_inconsistent(0);
                     self.macro_rules_tokens(args.clone(), true);
                     self.scan_end();
                     self.zerobreak();
@@ -649,9 +649,9 @@ impl Engine {
                 self.scan_string(" {");
                 if !item.body.is_empty() {
                     self.neverbreak();
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.hardbreak();
-                    self.ibox(0);
+                    self.scan_begin_inconsistent(0);
                     self.macro_rules_tokens(item.body.clone(), false);
                     self.scan_end();
                     self.hardbreak();
@@ -675,10 +675,10 @@ impl Engine {
                     self.scan_string("::");
                     self.use_tree(&item.trees[0].inner);
                 } else {
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.scan_string("{");
                     self.zerobreak();
-                    self.ibox(0);
+                    self.scan_begin_inconsistent(0);
                     for use_tree in item.trees.iter().delimited() {
                         if use_tree.leading_colon.is_some() {
                             self.scan_string("::");
@@ -754,7 +754,7 @@ impl Engine {
             self.scan_begin_consistent(INDENT);
             self.scan_string("{");
             self.zerobreak();
-            self.scan_begin_iconsistent(0);
+            self.scan_begin_inconsistent(0);
             for use_tree in use_group.items.iter().delimited() {
                 self.use_tree(&use_tree);
                 if !use_tree.is_last {
@@ -990,7 +990,7 @@ impl Engine {
         if let Some((_eq_token, default)) = &trait_item.default {
             self.scan_string(" = ");
             self.neverbreak();
-            self.scan_begin_iconsistent(-INDENT);
+            self.scan_begin_inconsistent(-INDENT);
             self.ty(default);
             self.scan_end();
         }
@@ -1175,7 +1175,7 @@ impl Engine {
         self.generics(&impl_item.generics);
         self.scan_string(" = ");
         self.neverbreak();
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.ty(&impl_item.ty);
         self.scan_end();
         self.where_clause_oneline_semi(&impl_item.generics.where_clause);
@@ -1604,7 +1604,7 @@ mod verbatim {
     impl Engine {
         pub fn flexible_item_const(&mut self, item: &FlexibleItemConst) {
             self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
+            self.scan_begin_consistent(INDENT);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1613,13 +1613,13 @@ mod verbatim {
             self.ident(&item.ident);
             self.generics(&item.generics);
             self.scan_string(": ");
-            self.cbox(-INDENT);
+            self.scan_begin_consistent(-INDENT);
             self.ty(&item.ty);
             self.scan_end();
             if let Some(value) = &item.value {
                 self.scan_string(" = ");
                 self.neverbreak();
-                self.ibox(-INDENT);
+                self.scan_begin_inconsistent(-INDENT);
                 self.expr(value);
                 self.scan_end();
             }
@@ -1630,7 +1630,7 @@ mod verbatim {
 
         pub fn flexible_item_fn(&mut self, item: &FlexibleItemFn) {
             self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
+            self.scan_begin_consistent(INDENT);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1656,7 +1656,7 @@ mod verbatim {
 
         pub fn flexible_item_static(&mut self, item: &FlexibleItemStatic) {
             self.outer_attrs(&item.attrs);
-            self.cbox(0);
+            self.scan_begin_consistent(0);
             self.visibility(&item.vis);
             self.scan_string("static ");
             self.static_mutability(&item.mutability);
@@ -1677,7 +1677,7 @@ mod verbatim {
 
         pub fn flexible_item_type(&mut self, item: &FlexibleItemType) {
             self.outer_attrs(&item.attrs);
-            self.cbox(INDENT);
+            self.scan_begin_consistent(INDENT);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1698,7 +1698,7 @@ mod verbatim {
                 self.where_clause_oneline(&item.generics.where_clause);
                 self.scan_string("= ");
                 self.neverbreak();
-                self.ibox(-INDENT);
+                self.scan_begin_inconsistent(-INDENT);
                 self.ty(definition);
                 self.scan_end();
                 self.where_clause_oneline_semi(&item.where_clause_after_eq);

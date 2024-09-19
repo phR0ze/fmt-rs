@@ -145,7 +145,7 @@ impl Engine {
         if let Some(generics) = &constraint.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.scan_begin_iconsistent(INDENT);
+        self.scan_begin_inconsistent(INDENT);
         for bound in constraint.bounds.iter().delimited() {
             if bound.is_first {
                 self.scan_string(": ");

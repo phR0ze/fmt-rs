@@ -3,7 +3,7 @@ use crate::model::{BeginToken, Break, BreakToken};
 
 impl Engine {
     /// Scan start with inconsistent breaks and the given indent for subsequent lines
-    pub fn scan_begin_iconsistent(&mut self, indent: isize) {
+    pub fn scan_begin_inconsistent(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
             breaks: Break::Inconsistent,

@@ -129,7 +129,7 @@ impl Engine {
 
     fn expr_assign(&mut self, expr: &ExprAssign) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         self.expr(&expr.left);
         self.scan_string(" = ");
         self.neverbreak();
@@ -163,8 +163,8 @@ impl Engine {
 
     fn expr_binary(&mut self, expr: &ExprBinary) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(INDENT);
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.expr(&expr.left);
         self.scan_end();
         self.space();
@@ -215,8 +215,8 @@ impl Engine {
 
     fn expr_cast(&mut self, expr: &ExprCast) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(INDENT);
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.expr(&expr.expr);
         self.scan_end();
         self.space();
@@ -227,7 +227,7 @@ impl Engine {
 
     fn expr_closure(&mut self, expr: &ExprClosure) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         if let Some(bound_lifetimes) = &expr.lifetimes {
             self.bound_lifetimes(bound_lifetimes);
         }
@@ -337,7 +337,7 @@ impl Engine {
 
     fn expr_for_loop(&mut self, expr: &ExprForLoop) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         if let Some(label) = &expr.label {
             self.label(label);
         }
@@ -397,7 +397,7 @@ impl Engine {
                     other => {
                         self.scan_string("{");
                         self.space();
-                        self.scan_begin_iconsistent(INDENT);
+                        self.scan_begin_inconsistent(INDENT);
                         self.expr(other);
                         self.scan_end();
                         self.space();
@@ -443,14 +443,14 @@ impl Engine {
 
     fn expr_let(&mut self, expr: &ExprLet) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         self.scan_string("let ");
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         self.pat(&expr.pat);
         self.scan_end();
         self.scan_string(" = ");
         self.neverbreak();
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         let needs_paren = contains_exterior_struct_lit(&expr.expr);
         if needs_paren {
             self.scan_string("(");
@@ -493,7 +493,7 @@ impl Engine {
 
     fn expr_match(&mut self, expr: &ExprMatch) {
         self.outer_attrs(&expr.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         self.scan_string("match ");
         self.wrap_exterior_struct(&expr.expr);
         self.scan_string("{");
@@ -595,7 +595,7 @@ impl Engine {
     fn expr_struct(&mut self, expr: &ExprStruct) {
         self.outer_attrs(&expr.attrs);
         self.scan_begin_consistent(INDENT);
-        self.scan_begin_iconsistent(-INDENT);
+        self.scan_begin_inconsistent(-INDENT);
         self.qpath(&expr.qself, &expr.path, PathKind::Expr);
         self.scan_end();
         self.scan_string(" {");
@@ -775,9 +775,9 @@ impl Engine {
                 self.ident(&expr.name);
                 self.scan_string("(");
                 if !expr.args.is_empty() {
-                    self.cbox(INDENT);
+                    self.scan_begin_consistent(INDENT);
                     self.zerobreak();
-                    self.ibox(0);
+                    self.scan_begin_inconsistent(0);
                     self.macro_rules_tokens(expr.args, false);
                     self.scan_end();
                     self.zerobreak();
@@ -834,7 +834,7 @@ impl Engine {
         self.member(&field_value.member);
         if field_value.colon_token.is_some() {
             self.scan_string(": ");
-            self.scan_begin_iconsistent(0);
+            self.scan_begin_inconsistent(0);
             self.expr(&field_value.expr);
             self.scan_end();
         }
@@ -842,7 +842,7 @@ impl Engine {
 
     fn arm(&mut self, arm: &Arm) {
         self.outer_attrs(&arm.attrs);
-        self.scan_begin_iconsistent(0);
+        self.scan_begin_inconsistent(0);
         self.pat(&arm.pat);
         if let Some((_if_token, guard)) = &arm.guard {
             self.scan_string(" if ");
@@ -938,7 +938,7 @@ impl Engine {
             self.inner_attrs(attrs);
             match block.stmts.as_slice() {
                 [Stmt::Expr(expr, None)] if stmt::break_after(expr) => {
-                    self.scan_begin_iconsistent(0);
+                    self.scan_begin_inconsistent(0);
                     self.expr_beginning_of_line(expr, true);
                     self.scan_end();
                     self.space();

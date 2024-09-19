@@ -1,5 +1,6 @@
 pub(crate) struct Config {
-    //
+    pub(crate) max_width: usize,     // 100?
+    pub(crate) comment_width: usize, // 100?
 }
 
 // Target line width.

@@ -63,7 +63,7 @@ impl Engine {
         if consistent_break {
             self.scan_begin_consistent(0);
         } else {
-            self.scan_begin_iconsistent(0);
+            self.scan_begin_inconsistent(0);
         }
         for case in pat.cases.iter().delimited() {
             if !case.is_first {
@@ -230,7 +230,7 @@ impl Engine {
             }
             PatVerbatim::Const(pat) => {
                 self.scan_string("const ");
-                self.cbox(INDENT);
+                self.scan_begin_consistent(INDENT);
                 self.small_block(&pat.block, &pat.attrs);
                 self.scan_end();
             }

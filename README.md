@@ -7,7 +7,7 @@ WIP: Simple Rust source code formatter.
 * Able to be built with off the shelf crates and stable Rust
 
 ### Usage
-WIP: working on a simple cli binary to read and format code
+WIP: working on a simple cli binary to read and format Rust code
 
 ### Existing work
 The only works in this space that I could find were non-starters based on my intended goals. David 
@@ -17,12 +17,23 @@ purpose and adhere's to Rustfmt's styling as well.
 * [PrettyPlease](https://github.com/dtolnay/prettyplease)
   * Excellent work by David Tolnay
   * Pioneered the ability to build a tool like this from crates.io with stable rust
-  * Designed for formatting generated code as closely to Rustfmt's style as possible
-* [Community standard](https://github.com/rust-lang/rustfmt)
-  * Extreme vertical alignment preference
-  * Unable to be built from published crates
+  * Leverages David Tolnay's Syn package to parse the AST
+  * Follow's Rustfmt's style quite closely
+  * Designed for formatting generated code and as such:
+    * Doesn't support comments in code
+    * Accepts nested code formatting 
+* [GeneMichaels](https://github.com/andrewbaxter/genemichaels)
+  * Leverages David Tolnay's `Syn` package directly which is what `prettyplease` is based on
+  * Claims to format all code including macros and comments
+* [Rustfmt - Community standard](https://github.com/rust-lang/rustfmt)
+  * Stable, venerable and community supported
+  * Has an extreme preference for vertical alignment
+  * Unable to be built without insider support:
+    * Requires the toolchain to be setup for nightly
+    * Requires insider bits provided by the compiler tool chaain
+    * Can't be built from off the shelf published crates
 * [rsfmt](https://github.com/zBaitu/rsfmt)
-  * Depends on older published ast bits that require an older version of nightly
+  * Depends on older published AST crates that require an older version of nightly to compile
 
 ## Contributing
 The Rust AST related crates can only be built on `Nightly`.

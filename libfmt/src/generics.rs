@@ -83,7 +83,7 @@ impl Engine {
     fn type_param(&mut self, type_param: &TypeParam) {
         self.outer_attrs(&type_param.attrs);
         self.ident(&type_param.ident);
-        self.scan_begin_iconsistent(INDENT);
+        self.scan_begin_inconsistent(INDENT);
         for type_param_bound in type_param.bounds.iter().delimited() {
             if type_param_bound.is_first {
                 self.scan_string(": ");
@@ -348,9 +348,9 @@ impl Engine {
         self.ty(&predicate.bounded_ty);
         self.scan_string(":");
         if predicate.bounds.len() == 1 {
-            self.scan_begin_iconsistent(0);
+            self.scan_begin_inconsistent(0);
         } else {
-            self.scan_begin_iconsistent(INDENT);
+            self.scan_begin_inconsistent(INDENT);
         }
         for type_param_bound in predicate.bounds.iter().delimited() {
             if type_param_bound.is_first {
@@ -367,7 +367,7 @@ impl Engine {
     fn predicate_lifetime(&mut self, predicate: &PredicateLifetime) {
         self.lifetime(&predicate.lifetime);
         self.scan_string(":");
-        self.scan_begin_iconsistent(INDENT);
+        self.scan_begin_inconsistent(INDENT);
         for lifetime in predicate.bounds.iter().delimited() {
             if lifetime.is_first {
                 self.nbsp();

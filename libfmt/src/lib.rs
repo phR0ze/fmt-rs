@@ -59,15 +59,70 @@ impl Engine {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::str::FromStr;
     use indoc::indoc;
-    use proc_macro2::{Delimiter, Group, TokenStream};
+    use proc_macro2::{LexError, Span, TokenStream, TokenTree};
     use quote::quote;
 
-    // fn test(tokens: TokenStream, expected: &str) {
-    //     let syntax_tree: syn::File = syn::parse2(tokens).unwrap();
-    //     let pretty = format_syn_file(&syntax_tree).unwrap();
-    //     assert_eq!(pretty, expected);
-    // }
+    struct Code {
+        text: &'static str,
+    }
+
+    impl Code {
+        fn from_str(text: &'static str) -> Result<Self> {
+            // Parse the tokens
+            let tokens = TokenStream::from_str(text)
+                .map_err(|e| Error::new("failed to parse tokens").wrap_lex(e))?;
+
+            // Build our formatting object
+            let mut code = Self { text };
+
+            // Format the tokens
+            code.format(tokens, &mut 0);
+
+            Ok(code)
+        }
+
+        fn format(&mut self, tokens: TokenStream, level: &mut usize) {
+            for token in tokens {
+                match token {
+                    TokenTree::Ident(ident) => {
+                        println!("{}", span_to_str("Ident:", ident.span(), *level));
+                    }
+                    TokenTree::Literal(literal) => {
+                        println!("{}", span_to_str("Literal:", literal.span(), *level));
+                    }
+                    TokenTree::Group(group) => {
+                        *level += 1;
+                        self.format(group.stream(), level);
+                    }
+                    TokenTree::Punct(punct) => {
+                        println!("{}", span_to_str("Punct:", punct.span(), *level));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_process_token_stream() {
+        Code::from_str("// foo\nprintln!(\"{}\", \"1\");").unwrap();
+    }
+
+    fn span_to_str(name: &str, span: Span, level: usize) -> String {
+        let start = span.start();
+        let end = span.end();
+        format!(
+            "{:indent$}{: <8} {: <7} {: <7} {: <7} ({})",
+            "",
+            name,
+            format!("{}..{}", start.line, end.line),
+            format!("{}..{}", start.column, end.column),
+            format!("{:?}", span.byte_range()),
+            span.source_text().unwrap_or("<None>".into()),
+            indent = level * 2
+        )
+    }
 
     fn fmt(tokens: TokenStream) -> String {
         let syntax_tree: syn::File = syn::parse2(tokens).unwrap();
@@ -175,7 +230,26 @@ mod tests {
     }
 
     #[test]
-    fn test_drop_trailing_comma() {
+    fn test_allow_empty_line_before_comment() {
+        let out = fmt(quote! {
+
+            // This is a test
+            println!("{}", "1",);
+        });
+        assert_eq!(out, "println!(\"{}\", \"1\");\n");
+    }
+
+    #[test]
+    fn test_allow_one_empty_line() {
+        let out = fmt(quote! {
+
+            println!("{}", "1",);
+        });
+        assert_eq!(out, "\nprintln!(\"{}\", \"1\");\n");
+    }
+
+    #[test]
+    fn test_skip_trailing_comma() {
         let out = fmt(quote! {
             println!("{}", "1",);
         });
