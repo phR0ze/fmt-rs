@@ -1,14 +1,15 @@
 // Adapted from https://github.com/rust-lang/rust/blob/1.57.0/compiler/rustc_ast_pretty/src/pp.rs.
 // See "Algorithm notes" in the crate-level rustdoc.
 // https://doc.rust-lang.org/stable/nightly-rustc/rustc_ast_pretty/pp/index.html
-use tracing::trace;
-
 use crate::model::*;
 use crate::{MARGIN, MIN_SPACE};
+use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::iter;
 use std::{cmp, fmt};
+use tracing::trace;
 
 pub(crate) const SIZE_INFINITY: isize = 0xffff;
 
@@ -47,46 +48,58 @@ pub(crate) const SIZE_INFINITY: isize = 0xffff;
 /// than 3N tokens apart, because once there’s “obviously” too much data to fit on a line, in a size
 /// calculation, SCAN will write “infinity” to the size and let PRINT consume it.
 pub struct Engine {
+    /// Original input source
+    pub(crate) src: String,
+
     /// Final formatted output
-    out: String,
+    pub(crate) out: String,
 
     /// Used to track how much of the max line width is still available. As characters are printed,
     /// this value is decremented.
-    space: isize,
+    pub(crate) space: isize,
 
     /// Ring buffer of tokens and calculated size of strings i.e. number of characters
-    scan_buf: RingBuffer<BufEntry>,
+    pub(crate) scan_buf: RingBuffer<BufEntry>,
 
     /// Tracks the total size (i.e. number of characters) of tokens that have been printed from the
     /// ring buffer.
     /// Always starts at 1
-    left_total: isize,
+    pub(crate) left_total: isize,
 
     /// Tracks the total size (i.e. number of characters) of tokens that have been enqueued in the
     /// ring buffer.
     /// Always starts at 1
-    right_total: isize,
+    pub(crate) right_total: isize,
 
     /// Tracks the current block being scanned. Holds ring-buffer index values of the Begin that
     /// started the current block, possibly with the most recent Break after that Begin (if there is
     /// any) on top of it. Values are pushed and popped on the back of the queue using it like
     /// stack, and elsewhere old values are popped from the front of the queue as they become
     /// irrelevant due to the primary ring-buffer advancing.
-    scan_stack: VecDeque<usize>,
+    pub(crate) scan_stack: VecDeque<usize>,
 
     /// Stack of blocks-in-progress being flushed by print methods
-    print_stack: Vec<PrintFrame>,
+    pub(crate) print_stack: Vec<PrintFrame>,
 
     /// Print related field for level of indentation of current line
-    indent: usize,
+    pub(crate) indent: usize,
 
     /// Print related field for indentation to avoid writing trailing whitespace
-    pending_indentation: usize,
+    pub(crate) pending_indentation: usize,
+
+    /// The proc-macro2 subsystem used for all of David Tolnay's excellent AST manipulation crates
+    /// were designed primarily for working with generated code and as such drop regular comments
+    /// and whitespace . This field is used by the pre-parser to store comments and whitespace ahead
+    /// of time so that they can be re-inserted into the the final output in order to preserve a
+    /// human maintained codebase. The key is the line and column of the comment and the value is the
+    /// original comment string which can be any whitespace or any of the comment types.
+    pub(crate) comments: HashMap<LineColumn, Comment>,
 }
 
 impl Engine {
-    pub fn new() -> Self {
+    pub fn new(source: &str) -> Self {
         Self {
+            src: source.into(),
             out: String::new(),
             space: MARGIN,
             scan_buf: RingBuffer::new(),
@@ -96,18 +109,100 @@ impl Engine {
             print_stack: Vec::new(),
             indent: 0,
             pending_indentation: 0,
+            comments: HashMap::new(),
         }
     }
 
-    /// Convert remaining scan buffer into an output string.
-    pub fn eof(mut self) -> String {
-        trace!("EOF");
+    /// Complete the formatting process and return the final output string.
+    pub fn print(mut self) -> String {
+        trace!("Print");
 
         if !self.scan_stack.is_empty() {
             self.check_stack(0);
             self.print_any();
         }
         self.out
+    }
+
+    /// Collect comments from the original source using the token stream to provide location
+    /// information relative the associated tokens. Comments are being defined as any lines
+    /// of text that were dropped during the conversion into tokens. This can be newlines,
+    /// regular comments, and inner and outer doc comments.
+    /// * ***stream***: Token stream to process
+    /// * ***offset***: Offset into the original source string for tracking comment location
+    pub(crate) fn pre_process_comments(&mut self, stream: TokenStream, offset: &mut usize) {
+        for token in stream {
+            match token {
+                TokenTree::Ident(ident) => {
+                    self.process_span(ident.span(), offset);
+                    println!("{}", self.debug_span_to_str("Ident:", ident.span()));
+                }
+                TokenTree::Literal(literal) => {
+                    self.process_span(literal.span(), offset);
+                    println!("{}", self.debug_span_to_str("Literal:", literal.span()));
+                }
+                TokenTree::Group(group) => {
+                    let open = group.delim_span().open();
+                    self.process_span(group.delim_span().open(), offset);
+                    println!("{}", self.debug_span_to_str("Group:", open));
+                    let close = group.delim_span().close();
+                    self.pre_process_comments(group.stream(), offset);
+                    self.process_span(group.delim_span().close(), offset);
+                    println!("{}", self.debug_span_to_str("Group:", close));
+                }
+                TokenTree::Punct(punct) => {
+                    self.process_span(punct.span(), offset);
+                    println!("{}", self.debug_span_to_str("Punct:", punct.span()));
+                }
+            }
+        }
+    }
+
+    // Determine if the given span would indicate an associated comment and if so
+    // store it. In either case advance the offset to account for the span.
+    fn process_span(&mut self, span: Span, offset: &mut usize) {
+        let range = span.byte_range();
+
+        // Comments exist if offset is not equal to the start of the range
+        if range.start > *offset {
+            self.comments.insert(
+                span.start(),
+                Comment {
+                    src: self.src[*offset..range.start].into(),
+                    range: range.clone(),
+                    start: span.start(),
+                    end: span.end(),
+                },
+            );
+        };
+
+        // Update the offset to the end of the token
+        *offset += range.end - *offset;
+    }
+
+    fn debug_span_to_str(&self, name: &str, span: Span) -> String {
+        let range = span.byte_range();
+        let start = span.start();
+        let end = span.end();
+        let mut out = String::new();
+
+        // Optionally print any comment that might exist
+        if self.comments.contains_key(&start) {
+            let comment = self.comments.get(&start).unwrap();
+            out.push_str(&format!("Comment: ({})", comment.src));
+        }
+
+        // Create the string for the span
+        //self.out.reserve(self.pending_indentation);
+        out.push_str(&format!(
+            "{: <8} {: <7} {: <7} {: <7} ({})",
+            name,
+            format!("{}..{}", start.line, end.line),
+            format!("{}..{}", start.column, end.column),
+            format!("{:?}", range),
+            span.source_text().unwrap_or("<None>".into()),
+        ));
+        out
     }
 
     /// Marks the beginning of a block of code by pushing a BeginToken onto the scan buffer and
@@ -290,7 +385,7 @@ impl Engine {
     }
 
     /// ?
-    fn check_stack(&mut self, mut depth: usize) {
+    pub(crate) fn check_stack(&mut self, mut depth: usize) {
         trace!("Check stack");
 
         while let Some(&index) = self.scan_stack.back() {
@@ -326,7 +421,7 @@ impl Engine {
     /// Prints any token of zero or positive size. During print the control tokens that usually have
     /// a negative size are updated to have a positive size such that print_next will consume them.
     /// Also updates the left_total field to track the printed characters.
-    fn print_any(&mut self) {
+    pub(crate) fn print_any(&mut self) {
         trace!("Print any");
 
         while self.scan_buf.first().size >= 0 {
