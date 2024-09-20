@@ -35,6 +35,12 @@ purpose and adhere's to Rustfmt's styling as well.
 * [rsfmt](https://github.com/zBaitu/rsfmt)
   * Depends on older published AST crates that require an older version of nightly to compile
 
+### doc attribute
+[Turns out](https://stackoverflow.com/questions/77971478/how-to-insert-doc-comments-using-syn) the 
+`///` and `//!` are not really comments according to the AST but rather syntactic sugar for the 
+`#[doc]` attribute. While actual comments are discarded at parse time and cannot be maniuplated by 
+`syn`.
+
 ## Contributing
 The Rust AST related crates can only be built on `Nightly`.
 

@@ -61,11 +61,21 @@ mod tests {
     use super::*;
     use core::str::FromStr;
     use indoc::indoc;
-    use proc_macro2::{LexError, Span, TokenStream, TokenTree};
+    use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
     use quote::quote;
+    use std::{collections::HashMap, ops::Range};
+
+    struct Comment {
+        src: &'static str,   // Comment string
+        range: Range<usize>, // Location of next token in the source code
+        start: LineColumn,   // Start of the next token in the source code
+        end: LineColumn,     // End of the next token in the source code
+    }
 
     struct Code {
-        text: &'static str,
+        src: &'static str,                        // Original source code
+        offset: usize,                            // Track the offset in the source code
+        comments: HashMap<Range<usize>, Comment>, // Comments in the source code
     }
 
     impl Code {
@@ -75,53 +85,109 @@ mod tests {
                 .map_err(|e| Error::new("failed to parse tokens").wrap_lex(e))?;
 
             // Build our formatting object
-            let mut code = Self { text };
+            let mut code = Self {
+                src: text,
+                offset: 0,
+                comments: HashMap::new(),
+            };
 
-            // Format the tokens
-            code.format(tokens, &mut 0);
+            // Collect comments
+            code.collect_comments(tokens, &mut 0);
 
             Ok(code)
         }
 
-        fn format(&mut self, tokens: TokenStream, level: &mut usize) {
+        /// Collect comments from the original source using the token stream to provide location
+        /// information relative the associated tokens. Comments are being defined as any lines
+        /// of text that were dropped during the conversion into tokens. This can be newlines,
+        /// regular comments, and inner and outer doc comments.
+        fn collect_comments(&mut self, tokens: TokenStream, level: &mut usize) {
             for token in tokens {
                 match token {
                     TokenTree::Ident(ident) => {
-                        println!("{}", span_to_str("Ident:", ident.span(), *level));
+                        self.process_span(ident.span());
+                        println!("{}", self.span_to_str("Ident:", ident.span(), *level));
                     }
                     TokenTree::Literal(literal) => {
-                        println!("{}", span_to_str("Literal:", literal.span(), *level));
+                        self.process_span(literal.span());
+                        println!("{}", self.span_to_str("Literal:", literal.span(), *level));
                     }
                     TokenTree::Group(group) => {
+                        let open = group.delim_span().open();
+                        self.process_span(group.delim_span().open());
+                        println!("{}", self.span_to_str("Group:", open, *level));
                         *level += 1;
-                        self.format(group.stream(), level);
+                        let close = group.delim_span().close();
+                        self.collect_comments(group.stream(), level);
+                        self.process_span(group.delim_span().close());
+                        println!("{}", self.span_to_str("Group:", close, *level));
                     }
                     TokenTree::Punct(punct) => {
-                        println!("{}", span_to_str("Punct:", punct.span(), *level));
+                        self.process_span(punct.span());
+                        println!("{}", self.span_to_str("Punct:", punct.span(), *level));
                     }
                 }
             }
+        }
+
+        // Determine if the given span would indicate an associated comment and if so
+        // store it. In either case advance the offset to account for the span.
+        fn process_span(&mut self, span: Span) {
+            let range = span.byte_range();
+
+            // Comments exist if offset is not equal to the start of the range
+            if range.start > self.offset {
+                self.comments.insert(
+                    range.clone(),
+                    Comment {
+                        src: &self.src[self.offset..range.start],
+                        range: range.clone(),
+                        start: span.start(),
+                        end: span.end(),
+                    },
+                );
+            };
+
+            // Update the offset to the end of the token
+            self.offset += range.end - self.offset;
+        }
+
+        fn span_to_str(&self, name: &str, span: Span, level: usize) -> String {
+            let range = span.byte_range();
+            let start = span.start();
+            let end = span.end();
+            let mut out = String::new();
+
+            // Optionally print any comment that might exist
+            if self.comments.contains_key(&range) {
+                let comment = self.comments.get(&range).unwrap();
+                out.push_str(&format!(
+                    "Comment: {:indent$} ({})",
+                    "",
+                    comment.src,
+                    indent = level * 2
+                ));
+            }
+
+            // Create the string for the span
+            //self.out.reserve(self.pending_indentation);
+            out.push_str(&format!(
+                "{:indent$}{: <8} {: <7} {: <7} {: <7} ({})",
+                "",
+                name,
+                format!("{}..{}", start.line, end.line),
+                format!("{}..{}", start.column, end.column),
+                format!("{:?}", range),
+                span.source_text().unwrap_or("<None>".into()),
+                indent = level * 2
+            ));
+            out
         }
     }
 
     #[test]
     fn test_process_token_stream() {
         Code::from_str("// foo\nprintln!(\"{}\", \"1\");").unwrap();
-    }
-
-    fn span_to_str(name: &str, span: Span, level: usize) -> String {
-        let start = span.start();
-        let end = span.end();
-        format!(
-            "{:indent$}{: <8} {: <7} {: <7} {: <7} ({})",
-            "",
-            name,
-            format!("{}..{}", start.line, end.line),
-            format!("{}..{}", start.column, end.column),
-            format!("{:?}", span.byte_range()),
-            span.source_text().unwrap_or("<None>".into()),
-            indent = level * 2
-        )
     }
 
     fn fmt(tokens: TokenStream) -> String {

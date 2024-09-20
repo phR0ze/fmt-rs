@@ -11,10 +11,10 @@ pub(crate) struct BufEntry {
 
 #[derive(Debug, Clone)]
 pub(crate) enum Token {
-    ///
+    /// Actual values are stored as strings.
     String(Cow<'static, str>),
 
-    ///
+    /// Break tokens are pushed onto the ring-buffer when a line-break is needed.
     Break(BreakToken),
 
     /// Begin tokens are pushed onto the ring-buffer when a block is opened. They carry an offset
