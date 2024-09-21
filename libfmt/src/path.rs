@@ -4,7 +4,7 @@ use crate::INDENT;
 use std::ptr;
 use syn::{
     AngleBracketedGenericArguments, AssocConst, AssocType, Constraint, Expr, GenericArgument,
-    ParenthesizedGenericArguments, Path, PathArguments, PathSegment, QSelf,
+    ParenthesizedGenericArguments, PathArguments, QSelf,
 };
 
 #[derive(Copy, Clone, PartialEq)]
@@ -19,7 +19,7 @@ pub enum PathKind {
 
 impl Engine {
     /// Trait, Macro, etc. name
-    pub fn path(&mut self, path: &Path, kind: PathKind) {
+    pub fn path(&mut self, path: &syn::Path, kind: PathKind) {
         assert!(!path.segments.is_empty());
         for segment in path.segments.iter().delimited() {
             if !segment.is_first || path.leading_colon.is_some() {
@@ -29,7 +29,7 @@ impl Engine {
         }
     }
 
-    pub fn path_segment(&mut self, segment: &PathSegment, kind: PathKind) {
+    pub fn path_segment(&mut self, segment: &syn::PathSegment, kind: PathKind) {
         self.ident(&segment.ident);
         self.path_arguments(&segment.arguments, kind);
     }
@@ -172,7 +172,7 @@ impl Engine {
         self.scan_end();
     }
 
-    pub fn qpath(&mut self, qself: &Option<QSelf>, path: &Path, kind: PathKind) {
+    pub fn qpath(&mut self, qself: &Option<QSelf>, path: &syn::Path, kind: PathKind) {
         let qself = if let Some(qself) = qself {
             qself
         } else {

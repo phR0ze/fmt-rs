@@ -1,7 +1,10 @@
 // Adapted from https://github.com/rust-lang/rust/blob/1.57.0/compiler/rustc_ast_pretty/src/pp.rs.
 // See "Algorithm notes" in the crate-level rustdoc.
 // https://doc.rust-lang.org/stable/nightly-rustc/rustc_ast_pretty/pp/index.html
-use crate::model::*;
+use crate::{
+    comments::{self, Comment},
+    model::*,
+};
 use crate::{MARGIN, MIN_SPACE};
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use std::borrow::Cow;
@@ -93,7 +96,7 @@ pub struct Engine {
     /// of time so that they can be re-inserted into the the final output in order to preserve a
     /// human maintained codebase. The key is the line and column of the comment and the value is the
     /// original comment string which can be any whitespace or any of the comment types.
-    pub(crate) comments: HashMap<LineColumn, Comment>,
+    pub(crate) comments: HashMap<LineColumn, Vec<Comment>>,
 }
 
 impl Engine {
@@ -134,46 +137,40 @@ impl Engine {
         for token in stream {
             match token {
                 TokenTree::Ident(ident) => {
-                    self.process_span(ident.span(), offset);
+                    self.parse_comments(ident.span(), offset);
                     println!("{}", self.debug_span_to_str("Ident:", ident.span()));
                 }
                 TokenTree::Literal(literal) => {
-                    self.process_span(literal.span(), offset);
+                    self.parse_comments(literal.span(), offset);
                     println!("{}", self.debug_span_to_str("Literal:", literal.span()));
                 }
                 TokenTree::Group(group) => {
                     let open = group.delim_span().open();
-                    self.process_span(group.delim_span().open(), offset);
+                    self.parse_comments(group.delim_span().open(), offset);
                     println!("{}", self.debug_span_to_str("Group:", open));
                     let close = group.delim_span().close();
                     self.pre_process_comments(group.stream(), offset);
-                    self.process_span(group.delim_span().close(), offset);
+                    self.parse_comments(group.delim_span().close(), offset);
                     println!("{}", self.debug_span_to_str("Group:", close));
                 }
                 TokenTree::Punct(punct) => {
-                    self.process_span(punct.span(), offset);
+                    self.parse_comments(punct.span(), offset);
                     println!("{}", self.debug_span_to_str("Punct:", punct.span()));
                 }
             }
         }
     }
 
-    // Determine if the given span would indicate an associated comment and if so
+    // Determine if the given span has an associated comment and if so
     // store it. In either case advance the offset to account for the span.
-    fn process_span(&mut self, span: Span, offset: &mut usize) {
+    fn parse_comments(&mut self, span: Span, offset: &mut usize) {
         let range = span.byte_range();
 
         // Comments exist if offset is not equal to the start of the range
         if range.start > *offset {
-            self.comments.insert(
-                span.start(),
-                Comment {
-                    src: self.src[*offset..range.start].into(),
-                    range: range.clone(),
-                    start: span.start(),
-                    end: span.end(),
-                },
-            );
+            if let Some(comments) = comments::from_str(&self.src[*offset..range.start]) {
+                self.comments.insert(span.start(), comments);
+            }
         };
 
         // Update the offset to the end of the token
@@ -187,9 +184,15 @@ impl Engine {
         let mut out = String::new();
 
         // Optionally print any comment that might exist
-        if self.comments.contains_key(&start) {
-            let comment = self.comments.get(&start).unwrap();
-            out.push_str(&format!("Comment: ({})", comment.src));
+        if let Some(comment) = self.comments.get(&start) {
+            out.push_str(&format!(
+                "Comment: ({})",
+                comment
+                    .iter()
+                    .map(|x| x.text())
+                    .collect::<Vec<String>>()
+                    .join("")
+            ));
         }
 
         // Create the string for the span
@@ -203,6 +206,28 @@ impl Engine {
             span.source_text().unwrap_or("<None>".into()),
         ));
         out
+    }
+
+    /// Search the stored comments for a match for the given token
+    /// * ***token***: a syn type that can be converted into a token stream
+    //pub(crate) fn scan_comments(&mut self, tokens: impl ToTokens) {
+    // pub(crate) fn scan_comments(&mut self, tokens: &TokenStream) {
+    //     //let stream = tokens.to_token_stream();
+    //     if let Some(token) = tokens.clone().into_iter().next() {
+    //         let start = token.span().start();
+    //         if let Some(comment) = self.comments.remove(&start) {
+    //             self.scan_string(comment.src);
+    //         }
+    //     }
+    // }
+
+    /// Search the stored comments for a match for the given LineColumn location
+    /// * ***loc***: location in the source string to search for a comment
+    pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
+        if let Some(comment) = self.comments.remove(&span.start()) {
+            // TODO: fix this
+            //self.scan_string(comment.text());
+        }
     }
 
     /// Marks the beginning of a block of code by pushing a BeginToken onto the scan buffer and

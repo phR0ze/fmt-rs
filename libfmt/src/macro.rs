@@ -1,7 +1,7 @@
+use crate::engine::Engine;
 use crate::path::PathKind;
 use crate::token::Token;
 use crate::INDENT;
-use crate::{engine::Engine, INVOKATION_BRACE_STYLE_SAME_LINE};
 use proc_macro2::{Delimiter, Spacing, TokenStream};
 use syn::{Ident, Macro, MacroDelimiter};
 

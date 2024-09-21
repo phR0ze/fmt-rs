@@ -1,4 +1,5 @@
 mod attr;
+pub(crate) mod comments;
 mod config;
 mod convenience;
 mod data;
@@ -45,7 +46,7 @@ impl Engine {
         // Pre-process the token stream for comment locational information
         self.pre_process_comments(tokens.clone(), &mut 0);
 
-        // Parse the syntax tree
+        // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
             .map_err(|e| Error::new("failed to parse token stream into syntax tree").wrap_syn(e))?;
         self.scan_begin_consistent(0);
@@ -70,22 +71,6 @@ impl Engine {
 mod tests {
     use super::*;
     use indoc::indoc;
-
-    #[test]
-    fn test_allow_one_empty_line() {
-        let source = indoc! {r#"
-
-            println!("{}", "1",);
-        "#};
-
-        assert_eq!(
-            format_str(source).unwrap(),
-            indoc! {r#"
-                
-                println!("{}", "1");
-            "#}
-        );
-    }
 
     // // Rustfmt will align the parameters vertically
     // // libfmt will align the parameters horizontally and wrap intelligently
@@ -205,6 +190,39 @@ mod tests {
     //     });
     //     assert_eq!(out, "\nprintln!(\"{}\", \"1\");\n");
     // }
+
+    #[test]
+    fn test_only_allow_one_empty_line() {
+        let source = indoc! {r#"
+
+
+            println!("{}", "1",);
+        "#};
+
+        assert_eq!(
+            format_str(source).unwrap(),
+            indoc! {r#"
+                
+                println!("{}", "1");
+            "#}
+        );
+    }
+
+    #[test]
+    fn test_allow_one_empty_line() {
+        let source = indoc! {r#"
+
+            println!("{}", "1",);
+        "#};
+
+        assert_eq!(
+            format_str(source).unwrap(),
+            indoc! {r#"
+                
+                println!("{}", "1");
+            "#}
+        );
+    }
 
     #[test]
     fn test_skip_trailing_comma() {

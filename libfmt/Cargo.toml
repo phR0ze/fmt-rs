@@ -24,6 +24,7 @@ exclude = [
 #verbatim = []
 
 [dependencies]
+quote = { version = "1.0.35", default-features = false }
 proc-macro2 = { version = "1.0.80", default-features = false, features = [
     "span-locations", # Provides advanced span functions
 ] }
@@ -35,5 +36,4 @@ tracing = "0.1"
 
 [dev-dependencies]
 indoc = "2"
-quote = { version = "1.0.35", default-features = false }
 tracing-subscriber = "0.3"
