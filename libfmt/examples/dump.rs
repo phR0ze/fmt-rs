@@ -10,11 +10,9 @@ fn main() -> Result<()> {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     // Pass in an example
-    let source = indoc! {r#"
-        // Comment
-        println!("{}", "1");
-    "#};
-    libfmt::format_str(source)?;
+    let path = "examples/dump.rs";
+    let formatted = libfmt::format_file(path)?;
+    print!("{}", formatted);
 
     Ok(())
 }

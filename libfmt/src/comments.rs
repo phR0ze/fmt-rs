@@ -1,20 +1,34 @@
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Comment {
-    Empty(String),   // Empty line ending in a newline
-    Line(String),    // Single line comment noted by the `//` prefix
-    Block(String),   // Block comment noted by the `/*` prefix and `*/` suffix
-    Inner(String),   // Inner block comment noted by the `///` prefix
-    Outer(String),   // Outer block comment noted by the `//!` prefix
-    Unknown(String), // Non-conformant text
+    Empty(String),       // Empty line ending in a newline
+    Line(String),        // Single line comment noted by the `//` prefix
+    BlockLine(String),   // Block comment noted by the `/*` prefix and `*/` suffix
+    BlockStart(String),  // Block comment noted by the `/*` start
+    BlockMiddle(String), // Whatever is between the block start and end
+    BlockEnd(String),    // Block comment noted by the `*/` end
+    Inner(String),       // Inner block comment noted by the `///` prefix
+    Outer(String),       // Outer block comment noted by the `//!` prefix
+    Unknown(String),     // Non-conformant text
 }
 
 impl Comment {
+    /// Check if the comment is a block start
+    pub(crate) fn is_block_start(&self) -> bool {
+        match self {
+            Self::BlockStart(_) => true,
+            _ => false,
+        }
+    }
+
     /// Get the text of the comment
     pub(crate) fn text(&self) -> String {
         match self {
             Self::Empty(text) => text.clone(),
             Self::Line(text) => text.clone(),
-            Self::Block(text) => text.clone(),
+            Self::BlockLine(text) => text.clone(),
+            Self::BlockStart(text) => text.clone(),
+            Self::BlockMiddle(text) => text.clone(),
+            Self::BlockEnd(text) => text.clone(),
             Self::Inner(text) => text.clone(),
             Self::Outer(text) => text.clone(),
             Self::Unknown(text) => text.clone(),
@@ -25,15 +39,18 @@ impl Comment {
 /// Parse comments from the given string
 pub(crate) fn from_str<T: Into<String>>(text: T) -> Option<Vec<Comment>> {
     let text: String = text.into();
-    let mut comments = vec![]; // final results
+    let mut comments: Vec<Comment> = vec![]; // final results
     let mut line = String::new(); // temp buffer
 
     // Track throughout
     let mut prev_empty_line = false;
+    let mut comment_block_starts = 0;
+    let mut comment_block_ends = 0;
 
     // Reset on each newline
+    let mut comment_block_start = false;
+    let mut comment_block_end = false;
     let mut comment_line = false;
-    let mut comment_block = false;
     let mut comment_inner = false;
     let mut comment_outer = false;
     let mut empty = true;
@@ -49,8 +66,8 @@ pub(crate) fn from_str<T: Into<String>>(text: T) -> Option<Vec<Comment>> {
                 line.pop();
             }
 
+            // Only allow a single empty line consecutively regardless of context
             if empty {
-                // Only allow a single empty line consecutively
                 if prev_empty_line {
                     line.clear();
                     prev_char = '\0';
@@ -62,24 +79,38 @@ pub(crate) fn from_str<T: Into<String>>(text: T) -> Option<Vec<Comment>> {
                 prev_empty_line = false;
             }
 
-            comments.push(if empty {
-                Comment::Empty("\n".to_string())
-            } else if comment_line {
-                Comment::Line(line)
-            } else if comment_block {
-                Comment::Block(line)
-            } else if comment_inner {
-                Comment::Inner(line)
-            } else if comment_outer {
-                Comment::Outer(line)
-            } else {
-                Comment::Unknown(line)
-            });
+            comments.push(
+                // Everything is included in a block comment until the end
+                if comment_block_starts > comment_block_ends {
+                    if comment_block_start {
+                        Comment::BlockStart(line)
+                    } else {
+                        Comment::BlockMiddle(line)
+                    }
+                } else {
+                    if empty {
+                        Comment::Empty("\n".to_string())
+                    } else if comment_line {
+                        Comment::Line(line)
+                    } else if comment_block_start && comment_block_end {
+                        Comment::BlockLine(line)
+                    } else if comment_block_end {
+                        Comment::BlockEnd(line)
+                    } else if comment_inner {
+                        Comment::Inner(line)
+                    } else if comment_outer {
+                        Comment::Outer(line)
+                    } else {
+                        Comment::Unknown(line)
+                    }
+                },
+            );
 
             // reset
             empty = true;
             comment_line = false;
-            comment_block = false;
+            comment_block_start = false;
+            comment_block_end = false;
             comment_inner = false;
             comment_outer = false;
             line = String::new();
@@ -89,27 +120,32 @@ pub(crate) fn from_str<T: Into<String>>(text: T) -> Option<Vec<Comment>> {
             empty = false;
             prev_empty_line = false;
 
-            // Check for comments types
-            let mut comment = false;
+            // Check for public comment types
+            let mut pub_comment = false;
             if let Some(next_char) = iter.peek() {
                 if prev_char == '/' && char == '/' && *next_char == '/' {
-                    comment = true;
+                    pub_comment = true;
                     char = iter.next().unwrap();
                     line.push(char);
                     comment_inner = true;
                 } else if prev_char == '/' && char == '/' && *next_char == '!' {
-                    comment = true;
+                    pub_comment = true;
                     char = iter.next().unwrap();
                     line.push(char);
                     comment_outer = true;
                 }
             }
 
-            if !comment {
+            // Check for other comment types
+            if !pub_comment {
                 if prev_char == '/' && char == '/' {
                     comment_line = true;
                 } else if prev_char == '/' && char == '*' {
-                    comment_block = true;
+                    comment_block_starts += 1;
+                    comment_block_start = true;
+                } else if prev_char == '*' && char == '/' {
+                    comment_block_ends += 1;
+                    comment_block_end = true;
                 }
             }
         }
@@ -122,8 +158,12 @@ pub(crate) fn from_str<T: Into<String>>(text: T) -> Option<Vec<Comment>> {
     if !line.is_empty() {
         if comment_line {
             comments.push(Comment::Line(line));
-        } else if comment_block {
-            comments.push(Comment::Block(line));
+        } else if comment_block_start && comment_block_end {
+            comments.push(Comment::BlockLine(line));
+        } else if comment_block_end {
+            comments.push(Comment::BlockStart(line));
+        } else if comment_block_end {
+            comments.push(Comment::BlockEnd(line));
         } else if comment_inner {
             comments.push(Comment::Inner(line));
         } else if comment_outer {
@@ -148,20 +188,51 @@ mod tests {
     use indoc::indoc;
 
     #[test]
-    fn test_comment_block() {
+    fn test_comment_block_lines() {
         let source = indoc! {r#"
-            /**
-             * Block
-             */
+            // Line 1
+            /* Block line 1 */
+            /* Block line 2 */ other
+            other
         "#};
         assert_eq!(
             from_str(source).unwrap(),
-            vec![Comment::Block("/**\n * Block\n */\n".into()),]
+            vec![
+                Comment::Line("// Line 1\n".into()),
+                Comment::BlockLine("/* Block line 1 */\n".into()),
+                Comment::BlockLine("/* Block line 2 */ other\n".into()),
+                Comment::Unknown("other\n".into()),
+            ]
         );
     }
 
     #[test]
-    fn test_comment_unknown() {
+    fn test_comment_blocks_include_anything_until_end() {
+        let source = indoc! {r#"
+            /****
+
+             // Line 1
+             * Block
+             // Line 2
+
+             ***/
+        "#};
+        assert_eq!(
+            from_str(source).unwrap(),
+            vec![
+                Comment::BlockStart("/****\n".into()),
+                Comment::BlockMiddle("\n".into()),
+                Comment::BlockMiddle(" // Line 1\n".into()),
+                Comment::BlockMiddle(" * Block\n".into()),
+                Comment::BlockMiddle(" // Line 2\n".into()),
+                Comment::BlockMiddle("\n".into()),
+                Comment::BlockEnd(" ***/\n".into()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_non_comment_lines_should_be_captured_as_well() {
         let source = indoc! {r#"
             foo
         "#};
@@ -178,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_line_and_inner_and_outer() {
+    fn test_mixing_comment_line_and_inner_and_outer_success() {
         let source = indoc! {r#"
 
             // Line
@@ -201,7 +272,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_line_and_inner() {
+    fn test_mixing_comment_line_and_inner_success() {
         let source = indoc! {r#"
 
             // Line
@@ -220,7 +291,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_line() {
+    fn test_simple_comment_line_success() {
         let source = indoc! {r#"
 
             // Comment

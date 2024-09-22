@@ -22,11 +22,20 @@ mod ty;
 use core::str::FromStr;
 pub(crate) use engine::Engine;
 use proc_macro2::TokenStream;
+use std::path::Path;
 use tracing::trace;
 
 // Re-export the public API
 pub use config::*;
 pub use error::{Error, Result};
+
+/// Format the given source file
+pub fn format_file<T: AsRef<Path>>(path: T) -> Result<String> {
+    let path = path.as_ref();
+    let source = std::fs::read_to_string(path)
+        .map_err(|e| Error::new("failed to read source file").wrap_io(e))?;
+    format_str(&source)
+}
 
 /// Format the given source string
 pub fn format_str(source: &str) -> Result<String> {
@@ -53,8 +62,6 @@ impl Engine {
         self.inner_attrs(&ast.attrs);
         for item in &ast.items {
             self.item(item);
-            // test
-            // item.to_token_stream().to_string();
         }
         self.scan_end();
 
@@ -124,93 +131,72 @@ mod tests {
     // Rustfmt will align macro parameters vertically
     // libfmt will align macro parameters horizontally and wrap intelligently
     // Issues:
-    // - trailing comma is left on and looks ugly
-    // - line length exceeds 100 characters
-    // #[test]
-    // fn test_macro_horizontal_aligment() {
-    //     // rustfmt: aligns vertically regardless of readability
-    //     let out = fmt(quote! {
-    //         impl fmt::Display for Example {
-    //             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //                 write!(
-    //                     f,
-    //                     "{} {} {} {} {} {} {} {}",
-    //                     "1", "2", "3", "4", "5", "6", "7", "8"
-    //                 )?;
-    //             }
-    //         }
-    //     });
-    //     println!("{}", out);
-    //     assert_eq!(
-    //         out,
-    //         indoc! {r#"
-    //             impl fmt::Display for Example {
-    //                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //                     write!(f, "{} {} {} {} {} {} {} {}", "1", "2", "3", "4", "5", "6", "7", "8")?;
-    //                 }
-    //             }
-    //         "#},
-    //     );
-    // }
+    // - not wrapping intelligently
+    #[test]
+    fn test_macro_horizontal_aligment() {
+        // rustfmt: aligns vertically regardless of readability
+        let source = indoc! {r#"
+            impl fmt::Display for Example {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(
+                        f,
+                        "{} {} {} {} {} {} {} {}",
+                        "1", "2", "3", "4", "5", "6", "7", "8",
+                    )?;
+                }
+            }
+        "#};
+        assert_eq!(
+            source,
+            indoc! {r#"
+                impl fmt::Display for Example {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(
+                            f,
+                            "{} {} {} {} {} {} {} {}",
+                            "1", "2", "3", "4", "5", "6", "7", "8",
+                        )?;
+                    }
+                }
+            "#},
+        );
+    }
 
-    // #[test]
-    // fn test_struct_definition() {
-    //     let out = fmt(quote! {
-    //         struct Foo {
-    //             a: i32,
-    //             b: i32,
-    //         }
-    //     });
-    //     assert_eq!(
-    //         out,
-    //         indoc! {r#"
-    //             struct Foo {
-    //                 a: i32,
-    //                 b: i32,
-    //             }
-    //         "#},
-    //     );
-    // }
+    #[test]
+    fn test_struct_definition_with_comments_and_whitespace() {
+        let source = indoc! {r#"
 
-    // #[test]
-    // fn test_allow_empty_line_before_comment() {
-    //     let out = fmt(quote! {
+            /// A foo struct
+            struct Foo {
 
-    //         // This is a test
-    //         println!("{}", "1",);
-    //     });
-    //     assert_eq!(out, "println!(\"{}\", \"1\");\n");
-    // }
+                // Field a
+                a: i32,
 
-    // #[test]
-    // fn test_allow_one_empty_line() {
-    //     let out = fmt(quote! {
+                // Field b
+                b: i32,
+            }
+        "#};
+        assert_eq!(
+            source,
+            indoc! {r#"
 
-    //         println!("{}", "1",);
-    //     });
-    //     assert_eq!(out, "\nprintln!(\"{}\", \"1\");\n");
-    // }
+                /// A foo struct
+                struct Foo {
+
+                    // Field a
+                    a: i32,
+
+                    // Field b
+                    b: i32,
+                }
+            "#},
+        );
+    }
 
     #[test]
     fn test_only_allow_one_empty_line() {
         let source = indoc! {r#"
 
-
-            println!("{}", "1",);
-        "#};
-
-        assert_eq!(
-            format_str(source).unwrap(),
-            indoc! {r#"
-                
-                println!("{}", "1");
-            "#}
-        );
-    }
-
-    #[test]
-    fn test_allow_one_empty_line() {
-        let source = indoc! {r#"
 
             println!("{}", "1",);
         "#};

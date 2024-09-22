@@ -224,9 +224,10 @@ impl Engine {
     /// Search the stored comments for a match for the given LineColumn location
     /// * ***loc***: location in the source string to search for a comment
     pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
-        if let Some(comment) = self.comments.remove(&span.start()) {
-            // TODO: fix this
-            //self.scan_string(comment.text());
+        if let Some(comments) = self.comments.remove(&span.start()) {
+            for comment in comments {
+                // self.scan_string(comment.text());
+            }
         }
     }
 
