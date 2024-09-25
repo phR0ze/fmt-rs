@@ -35,6 +35,17 @@ purpose and adhere's to Rustfmt's styling as well.
 * [rsfmt](https://github.com/zBaitu/rsfmt)
   * Depends on older published AST crates that require an older version of nightly to compile
 
+## Research
+
+### Verbatim
+Verbatim in the syn package is a way to deal with new Rust syntax that is added between syn releases.
+That is to say that it can be parsed, but cannot be represented in syn's types as syn doesn't yet 
+support the new syntax.
+
+**References**
+* [syn github](https://github.com/dtolnay/syn/issues/251)
+* [syn panicking](https://users.rust-lang.org/t/why-is-syn-panicking-instead-of-returning-expr-verbatim-when-parsing-custom-syntax/97989)
+
 ### doc attribute
 [Turns out](https://stackoverflow.com/questions/77971478/how-to-insert-doc-comments-using-syn) the 
 `///` and `//!` are not really comments according to the AST but rather syntactic sugar for the 

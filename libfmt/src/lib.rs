@@ -19,10 +19,11 @@ mod stmt;
 mod token;
 mod ty;
 
+use comments::Comment;
 use core::str::FromStr;
 pub(crate) use engine::Engine;
-use proc_macro2::TokenStream;
-use std::path::Path;
+use proc_macro2::{LineColumn, TokenStream};
+use std::{collections::HashMap, path::Path};
 use tracing::trace;
 
 // Re-export the public API
@@ -53,7 +54,7 @@ impl Engine {
             .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
         // Pre-process the token stream for comment locational information
-        self.pre_process_comments(tokens.clone(), &mut 0);
+        comments::pre_process(&self.src, &mut 0, tokens.clone(), &mut self.comments);
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)

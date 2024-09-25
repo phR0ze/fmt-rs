@@ -127,106 +127,12 @@ impl Engine {
         self.out
     }
 
-    /// Collect comments from the original source using the token stream to provide location
-    /// information relative the associated tokens. Comments are being defined as any lines
-    /// of text that were dropped during the conversion into tokens. This can be newlines,
-    /// regular comments, and inner and outer doc comments.
-    /// * ***stream***: Token stream to process
-    /// * ***offset***: Offset into the original source string for tracking comment location
-    pub(crate) fn pre_process_comments(&mut self, stream: TokenStream, offset: &mut usize) {
-        for token in stream {
-            match token {
-                TokenTree::Ident(ident) => {
-                    self.parse_comments(ident.span(), offset);
-                    println!("{}", self.debug_span_to_str("Ident:", ident.span()));
-                }
-                TokenTree::Literal(literal) => {
-                    self.parse_comments(literal.span(), offset);
-                    println!("{}", self.debug_span_to_str("Literal:", literal.span()));
-                }
-                TokenTree::Group(group) => {
-                    let open = group.delim_span().open();
-                    self.parse_comments(group.delim_span().open(), offset);
-                    println!("{}", self.debug_span_to_str("Group:", open));
-                    let close = group.delim_span().close();
-                    self.pre_process_comments(group.stream(), offset);
-                    self.parse_comments(group.delim_span().close(), offset);
-                    println!("{}", self.debug_span_to_str("Group:", close));
-                }
-                TokenTree::Punct(punct) => {
-                    self.parse_comments(punct.span(), offset);
-                    println!("{}", self.debug_span_to_str("Punct:", punct.span()));
-                }
-            }
-        }
-    }
-
-    // Determine if the given span has an associated comment and if so
-    // store it. In either case advance the offset to account for the span.
-    fn parse_comments(&mut self, span: Span, offset: &mut usize) {
-        let range = span.byte_range();
-
-        // Comments exist if offset is not equal to the start of the range
-        if range.start > *offset {
-            if let Some(comments) = comments::from_str(&self.src[*offset..range.start]) {
-                self.comments.insert(span.start(), comments);
-            }
-        };
-
-        // Update the offset to the end of the token
-        *offset += range.end - *offset;
-    }
-
-    fn debug_span_to_str(&self, name: &str, span: Span) -> String {
-        let range = span.byte_range();
-        let start = span.start();
-        let end = span.end();
-        let mut out = String::new();
-
-        // Optionally print any comment that might exist
-        if let Some(comment) = self.comments.get(&start) {
-            out.push_str(&format!(
-                "Comment: ({})",
-                comment
-                    .iter()
-                    .map(|x| x.text())
-                    .collect::<Vec<String>>()
-                    .join("")
-            ));
-        }
-
-        // Create the string for the span
-        //self.out.reserve(self.pending_indentation);
-        out.push_str(&format!(
-            "{: <8} {: <7} {: <7} {: <7} ({})",
-            name,
-            format!("{}..{}", start.line, end.line),
-            format!("{}..{}", start.column, end.column),
-            format!("{:?}", range),
-            span.source_text().unwrap_or("<None>".into()),
-        ));
-        out
-    }
-
-    /// Search the stored comments for a match for the given token
-    /// * ***token***: a syn type that can be converted into a token stream
-    //pub(crate) fn scan_comments(&mut self, tokens: impl ToTokens) {
-    // pub(crate) fn scan_comments(&mut self, tokens: &TokenStream) {
-    //     //let stream = tokens.to_token_stream();
-    //     if let Some(token) = tokens.clone().into_iter().next() {
-    //         let start = token.span().start();
-    //         if let Some(comment) = self.comments.remove(&start) {
-    //             self.scan_string(comment.src);
-    //         }
-    //     }
-    // }
-
     /// Search the stored comments for a match for the given LineColumn location
     /// * ***loc***: location in the source string to search for a comment
     pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
         if let Some(comments) = self.comments.remove(&span.start()) {
             for comment in comments {
-                // self.scan_string(comment.text());
+                self.scan_string(comment.text());
             }
         }
     }
