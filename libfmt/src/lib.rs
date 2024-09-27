@@ -20,6 +20,7 @@ mod token;
 mod ty;
 
 use comments::Comment;
+pub(crate) use convenience::pos;
 use core::str::FromStr;
 pub(crate) use engine::Engine;
 use proc_macro2::{LineColumn, TokenStream};
@@ -54,7 +55,7 @@ impl Engine {
             .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
         // Pre-process the token stream for comment locational information
-        comments::pre_process(&self.src, &mut 0, tokens.clone(), &mut self.comments);
+        comments::pre_process(&self.src, tokens.clone(), &mut self.comments);
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
@@ -164,6 +165,51 @@ mod tests {
     }
 
     #[test]
+    fn test_multi_comment_types() {
+        let source = indoc! {r#"
+            use indoc::indoc;
+            use libfmt::Result;
+            use tracing::Level;
+            use tracing_subscriber::FmtSubscriber;
+
+            fn main() -> Result<()> {
+                let subscriber = FmtSubscriber::builder()
+                    .with_max_level(Level::TRACE)
+                    .finish();
+                tracing::subscriber::set_global_default(subscriber).unwrap();
+
+                // Pass in an example
+                let path = "examples/dump.rs";
+                let formatted = libfmt::format_file(path)?;
+                print!("{}", formatted);
+
+                Ok(())
+            }
+        "#};
+        assert_eq!(
+            source,
+            indoc! {r#"
+                use indoc::indoc;
+                use libfmt::Result;
+                use tracing::Level;
+                use tracing_subscriber::FmtSubscriber;
+
+                fn main() -> Result<()> {
+                    let subscriber = FmtSubscriber::builder() .with_max_level(Level::TRACE) .finish();
+                    tracing::subscriber::set_global_default(subscriber).unwrap();
+
+                    // Pass in an example
+                    let path = "examples/dump.rs";
+                    let formatted = libfmt::format_file(path)?;
+                    print!("{}", formatted);
+
+                    Ok(())
+                }
+        "#}
+        );
+    }
+
+    #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"
 
@@ -178,7 +224,7 @@ mod tests {
             }
         "#};
         assert_eq!(
-            source,
+            format_str(source).unwrap(),
             indoc! {r#"
 
                 /// A foo struct

@@ -1,8 +1,9 @@
-use std::collections::HashMap;
-
+use crate::model::Source;
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
+use std::collections::HashMap;
 use tracing::trace;
 
+/// Encapsulate the different types of comments that can be found in the source
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Comment {
     Empty(String),       // Empty line ending in a newline
@@ -33,7 +34,7 @@ impl Comment {
         }
     }
 
-    /// Get the text of the comment
+    /// Get the raw text of the comment
     pub(crate) fn text(&self) -> String {
         match self {
             Self::Empty(text) => text.clone(),
@@ -49,7 +50,6 @@ impl Comment {
     }
 }
 
-// IMplement display trait for Comment
 impl std::fmt::Display for Comment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
@@ -66,51 +66,77 @@ impl std::fmt::Display for Comment {
     }
 }
 
-/// Collect comments from the original source using the token stream to provide location
-/// information relative the associated tokens. Comments are being defined as any lines
-/// of text that were dropped during the conversion into tokens. This can be newlines,
-/// regular comments, and inner and outer doc comments.
-/// * ***stream***: Token stream to process
-/// * ***offset***: Offset into the original source string for tracking comment location
+/// Collect comments from the original source using the token stream to provide position information
+/// relative the associated tokens. Comments are being defined as any lines of text that were
+/// dropped during the conversion into tokens that is not going to be added later by the pretty
+/// printer. This consists of newlines, regular comments, and
+/// inner and outer doc comments.
+///
+/// * ***source***: Original source
+/// * ***tokens***: Tokenized version of the source to process
+/// * ***collection***: Resulting collection of comments
 pub(crate) fn pre_process(
     source: &str,
-    offset: &mut usize,
-    stream: TokenStream,
-    collection: &mut HashMap<LineColumn, Vec<Comment>>,
+    tokens: TokenStream,
+    comments: &mut HashMap<LineColumn, Vec<Comment>>,
 ) {
-    for token in stream {
+    parse_tokens(&mut Source::new(source), tokens, comments);
+}
+
+/// Recursively parses tokens to find comments and store them in the collection
+///
+/// * ***source***: Source character matrix
+/// * ***tokens***: Tokenized version of the source to process
+/// * ***collection***: Resulting collection of comments
+fn parse_tokens(
+    source: &mut Source,
+    tokens: TokenStream,
+    comments: &mut HashMap<LineColumn, Vec<Comment>>,
+) {
+    for token in tokens {
         match &token {
             TokenTree::Ident(ident) => {
-                println!("{}", debug_span_to_str("Ident:", ident.span()));
-                parse(source, offset, collection, ident.span())
+                trace!("{}", span_to_str("Ident:", ident.span()));
+                parse_comments(source, comments, ident.span())
             }
             TokenTree::Literal(literal) => {
-                println!("{}", debug_span_to_str("Literal:", literal.span()));
-                parse(source, offset, collection, literal.span())
+                trace!("{}", span_to_str("Literal:", literal.span()));
+                parse_comments(source, comments, literal.span())
             }
             TokenTree::Group(group) => {
                 // Start group
                 let open = group.span_open();
-                println!("{}", debug_span_to_str("Group:", open));
-                parse(source, offset, collection, open);
+                trace!("{}", span_to_str("Group:", open));
+                parse_comments(source, comments, open);
 
                 // Recurse
-                pre_process(source, offset, group.stream(), collection);
+                parse_tokens(source, group.stream(), comments);
 
                 // End group after recursion
                 let close = group.span_close();
-                println!("{}", debug_span_to_str("Group:", close));
-                parse(source, offset, collection, close)
+                trace!("{}", span_to_str("Group:", close));
+                parse_comments(source, comments, close)
             }
             TokenTree::Punct(punct) => {
-                println!("{}", debug_span_to_str("Punct:", punct.span()));
-                parse(source, offset, collection, punct.span())
+                // proc_macro2 does recognize doc comments and stores them as attributes. We could
+                // either pass the attribute through with an indicator or simply skip attributes of
+                // this nature and just process the comments/whitespace ourselves in the parse
+                // function.
+                // let char = &source[punct.span().byte_range().start as i32]; if
+                // punct.as_char() == '#'
+                //     && punct.span().byte_range().start == proc_macro2::Spacing::Alone
+                // {
+                //     //
+                // }
+                trace!("{}", span_to_str("Punct:", punct.span()));
+                parse_comments(source, comments, punct.span())
             }
         }
     }
 }
 
-fn debug_span_to_str(name: &str, span: Span) -> String {
+/// Convert the span into a string for debugging purposes
+fn span_to_str(name: &str, span: Span) -> String {
     let range = span.byte_range();
     let start = span.start();
     let end = span.end();
@@ -128,41 +154,48 @@ fn debug_span_to_str(name: &str, span: Span) -> String {
     out
 }
 
-// Determine if the given span has an associated comment and if so
-// store it. In either case advance the offset to account for the span.
-fn parse(
-    source: &str,
-    offset: &mut usize,
+/// Determine if the given token span has an associated comment and if so store it. In either case
+/// advance the offset to account for the span.
+///
+/// * ***source***: Character matrix of source string
+/// * ***comments***: Collection of comments
+/// * ***span***: Span to process
+fn parse_comments(
+    source: &mut Source,
     comments: &mut HashMap<LineColumn, Vec<Comment>>,
     span: Span,
 ) {
-    let range = span.byte_range();
+    let (start, end) = (span.start(), span.end());
 
     // Comments only potentially exist if offset is not equal to the start of the range
-    if range.start > *offset {
-        let mut skip = false;
-
-        // A single newline or space is an expected whitespace value for typical code and should
-        // not be considered a comment to store.
-        if range.start - *offset == 1
-            && (source.chars().nth(*offset).map(|x| x == '\n' || x == ' ') == Some(true))
-        {
-            skip = true;
+    if start > source.get_pos() {
+        // We need to skip any whitespace that is not part of a comment as it will be added
+        // back in by the pretty printer.
+        // If the current char is whitespace or newline and the previous char is not whitespace or a
+        // newline
+        if source.prev().map(|x| x != &'\n' && x != &' ').is_some() {
+            if source.curr().map(|x| x == &'\n' || x == &' ').is_some() {
+                source.adv();
+            }
         }
 
         // Check for comments
-        if !skip {
-            if let Some(cmts) = from_str(&source[*offset..range.start]) {
-                for comment in &cmts {
-                    trace!("{}", comment);
+        if let Some(str) = source.str(start) {
+            if !str.is_empty() {
+                if let Some(_comments) = from_str(&str) {
+                    for comment in &_comments {
+                        trace!("{}", comment);
+                    }
+                    comments.insert(span.start(), _comments);
                 }
-                comments.insert(span.start(), cmts);
             }
         }
     };
 
     // Update the offset to the end of the token
-    *offset += range.end - *offset;
+    if source.get_pos() < end {
+        source.set_pos(end);
+    }
 }
 
 /// Parse comments from the given string
@@ -320,12 +353,37 @@ mod tests {
 
     fn pre_process_comments(src: &str, collection: &mut HashMap<LineColumn, Vec<Comment>>) {
         let tokens = TokenStream::from_str(src).unwrap();
-        pre_process(src, &mut 0, tokens, collection);
+        pre_process(src, tokens, collection);
     }
 
     #[traced_test]
     #[test]
-    fn test_demo() {
+    fn test_doc_comments() {
+        let source = indoc! {r#"
+
+             /// A foo
+            struct Foo {
+
+                /// Field
+                field: i32,
+            }
+        "#};
+        let mut comments: HashMap<LineColumn, Vec<Comment>> = HashMap::new();
+        pre_process_comments(source, &mut comments);
+
+        assert_eq!(comments.len(), 2);
+
+        let comments1 = &comments[&LineColumn { line: 2, column: 0 }];
+        // assert_eq!(comments1.len(), 1);
+        // assert_eq!(comments1[0].is_empty_line(), true);
+
+        // let comments2 = &comments[&LineColumn { line: 5, column: 0 }];
+        // assert_eq!(comments2.len(), 1);
+        // assert_eq!(comments2[0].is_empty_line(), true);
+    }
+
+    #[test]
+    fn test_multi_comment_types() {
         let source = indoc! {r#"
             use indoc::indoc;
             use libfmt::Result;
@@ -349,14 +407,35 @@ mod tests {
         let mut comments: HashMap<LineColumn, Vec<Comment>> = HashMap::new();
         pre_process_comments(source, &mut comments);
 
-        // No comments should be found
-        assert_eq!(0, comments.len());
+        // Validate the comments
+        let comments1 = &comments[&LineColumn { line: 6, column: 0 }];
+        assert_eq!(comments1.len(), 1);
+        assert_eq!(comments1[0].is_empty_line(), true);
+
+        let comments2 = &comments[&LineColumn {
+            line: 13,
+            column: 4,
+        }];
+        assert_eq!(comments2.len(), 2);
+        assert_eq!(comments2[0].is_empty_line(), true);
+        assert_eq!(
+            comments2[1].text(),
+            "    // Pass in an example\n".to_string()
+        );
+
+        let comments3 = &comments[&LineColumn {
+            line: 17,
+            column: 4,
+        }];
+        assert_eq!(comments3.len(), 1);
+        assert_eq!(comments3[0].is_empty_line(), true);
     }
 
-    // #[traced_test]
+    #[traced_test]
     #[test]
-    fn test_use_shoud_not_produce_comment() {
+    fn test_empty_lines() {
         let source = indoc! {r#"
+
             use foo1;
             use foo2;
 
@@ -365,15 +444,15 @@ mod tests {
         let mut comments: HashMap<LineColumn, Vec<Comment>> = HashMap::new();
         pre_process_comments(source, &mut comments);
 
-        // No comments should be found
-        assert_eq!(comments.len(), 1);
-        assert!(comments
-            .values()
-            .nth(0)
-            .unwrap()
-            .first()
-            .unwrap()
-            .is_empty_line());
+        assert_eq!(comments.len(), 2);
+
+        let comments1 = &comments[&LineColumn { line: 2, column: 0 }];
+        assert_eq!(comments1.len(), 1);
+        assert_eq!(comments1[0].is_empty_line(), true);
+
+        let comments2 = &comments[&LineColumn { line: 5, column: 0 }];
+        assert_eq!(comments2.len(), 1);
+        assert_eq!(comments2[0].is_empty_line(), true);
     }
 
     #[test]
