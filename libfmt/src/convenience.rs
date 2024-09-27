@@ -2,11 +2,6 @@ use crate::engine::{Engine, SIZE_INFINITY};
 use crate::model::{BeginToken, Break, BreakToken};
 use proc_macro2::LineColumn;
 
-/// Create a new LineColumn struct easily for positioning
-pub(crate) fn pos(line: usize, column: usize) -> LineColumn {
-    LineColumn { line, column }
-}
-
 impl Engine {
     /// Scan start with inconsistent breaks and the given indent for subsequent lines
     pub fn scan_begin_inconsistent(&mut self, indent: isize) {

@@ -20,7 +20,6 @@ mod token;
 mod ty;
 
 use comments::Comment;
-pub(crate) use convenience::pos;
 use core::str::FromStr;
 pub(crate) use engine::Engine;
 use proc_macro2::{LineColumn, TokenStream};

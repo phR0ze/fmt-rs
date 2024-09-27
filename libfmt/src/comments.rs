@@ -1,4 +1,4 @@
-use crate::model::Source;
+use crate::model::{Position, Source};
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use std::collections::HashMap;
 use tracing::trace;
@@ -137,18 +137,15 @@ fn parse_tokens(
 
 /// Convert the span into a string for debugging purposes
 fn span_to_str(name: &str, span: Span) -> String {
-    let range = span.byte_range();
-    let start = span.start();
-    let end = span.end();
+    let start: Position = span.start().into();
+    let end: Position = span.end().into();
     let mut out = String::new();
 
     // Create the string for the span
     out.push_str(&format!(
-        "{: <8} {: <7} {: <7} {: <7} ({})",
+        "{: <8} {: <10} ({})",
         name,
-        format!("{}..{}", start.line, end.line),
-        format!("{}..{}", start.column, end.column),
-        format!("{:?}", range),
+        format!("{}..{}", start, end,),
         span.source_text().unwrap_or("<None>".into()),
     ));
     out
@@ -165,12 +162,11 @@ fn parse_comments(
     comments: &mut HashMap<LineColumn, Vec<Comment>>,
     span: Span,
 ) {
-    let (start, end) = (span.start(), span.end());
+    let start: Position = span.start().into();
+    let end: Position = span.end().into();
 
     // Comments only potentially exist if offset is not equal to the start of the range
     if start > source.get_pos() {
-        // We need to skip any whitespace that is not part of a comment as it will be added
-        // back in by the pretty printer.
         // If the current char is whitespace or newline and the previous char is not whitespace or a
         // newline
         if source.prev().map(|x| x != &'\n' && x != &' ').is_some() {
@@ -346,6 +342,7 @@ fn from_str(text: &str) -> Option<Vec<Comment>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::pos;
     use indoc::indoc;
     use proc_macro2::TokenStream;
     use std::str::FromStr;
@@ -584,5 +581,31 @@ mod tests {
             from_str(source).unwrap(),
             vec![Comment::Empty("\n".into()),]
         );
+    }
+
+    #[test]
+    fn test_tokenstream_counts_starting_from_1() {
+        // indoc doesn't count the first line unless there is text there
+        let source1 = indoc! {r#"
+            1
+            2
+        "#};
+        let source2 = indoc! {r#"1
+            2
+        "#};
+        assert_eq!(source1, source2);
+
+        // Tokenization starts counting at 1,0 not 0,0
+        let tokens = TokenStream::from_str(source1).unwrap();
+
+        // Check that there are two tokens
+        assert_eq!(tokens.clone().into_iter().count(), 2);
+
+        // Check that the tokens are both Ident
+        let mut iter = tokens.into_iter();
+        let pos1: Position = iter.next().unwrap().span().start().into();
+        let pos2: Position = iter.next().unwrap().span().start().into();
+        assert_eq!(pos1, pos(0, 0));
+        assert_eq!(pos2, pos(1, 0));
     }
 }
