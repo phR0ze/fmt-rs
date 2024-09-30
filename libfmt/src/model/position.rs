@@ -27,6 +27,18 @@ impl Default for Position {
     }
 }
 
+/// Subtract usize from Position
+impl std::ops::Sub<usize> for Position {
+    type Output = Self;
+
+    fn sub(self, rhs: usize) -> Self::Output {
+        Self {
+            line: self.line,
+            column: self.column.checked_sub(rhs).unwrap_or(0),
+        }
+    }
+}
+
 /// From LineColumn to Position conversion
 impl From<LineColumn> for Position {
     fn from(lc: LineColumn) -> Self {
@@ -55,6 +67,13 @@ impl std::fmt::Display for Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_subtract_usize() {
+        assert_eq!(pos(0, 0) - 1, pos(0, 0));
+        assert_eq!(pos(0, 1) - 1, pos(0, 0));
+        assert_eq!(pos(0, 2) - 1, pos(0, 1));
+    }
 
     #[test]
     fn test_order() {

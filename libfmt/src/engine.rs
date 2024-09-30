@@ -96,7 +96,7 @@ pub struct Engine {
     /// of time so that they can be re-inserted into the the final output in order to preserve a
     /// human maintained codebase. The key is the line and column of the comment and the value is the
     /// original comment string which can be any whitespace or any of the comment types.
-    pub(crate) comments: HashMap<LineColumn, Vec<Comment>>,
+    pub(crate) comments: HashMap<Position, Vec<Comment>>,
 }
 
 impl Engine {
@@ -127,10 +127,10 @@ impl Engine {
         self.out
     }
 
-    /// Search the stored comments for a match for the given LineColumn location
-    /// * ***loc***: location in the source string to search for a comment
+    /// Search the stored comments for a match for the given span location by Position
+    /// * ***span***: location in the source string to search for a comment
     pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
-        if let Some(comments) = self.comments.remove(&span.start()) {
+        if let Some(comments) = self.comments.remove(&Position::from(span.start())) {
             for comment in comments {
                 self.scan_string(comment.text());
             }

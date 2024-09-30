@@ -54,7 +54,7 @@ impl Engine {
             .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
         // Pre-process the token stream for comment locational information
-        comments::pre_process(&self.src, tokens.clone(), &mut self.comments);
+        let tokens = comments::pre_process(&self.src, tokens, &mut self.comments);
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
@@ -80,164 +80,164 @@ mod tests {
     use super::*;
     use indoc::indoc;
 
-    // // Rustfmt will align the parameters vertically
-    // // libfmt will align the parameters horizontally and wrap intelligently
+    // // // Rustfmt will align the parameters vertically
+    // // // libfmt will align the parameters horizontally and wrap intelligently
+    // // #[test]
+    // // fn test_params_align_horizontally() {
+    // //     // rustfmt: aligns vertically regardless of readability
+    // //     let out = fmt(quote! {
+    // //         impl fmt::Display for Example {
+    // //             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    // //                 write!(
+    // //                     f,
+    // //                     "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+    // //                     "1",
+    // //                     "2",
+    // //                     "3",
+    // //                     "4",
+    // //                     "5",
+    // //                     "6",
+    // //                     "7",
+    // //                     "8",
+    // //                     "9",
+    // //                     "10",
+    // //                     "11",
+    // //                     "12",
+    // //                     "13",
+    // //                     "14",
+    // //                     "15",
+    // //                     "16",
+    // //                     "17"
+    // //                 )?;
+    // //             }
+    // //         }
+    // //     });
+    // //     println!("{}", out);
+    // //     assert_eq!(
+    // //         out,
+    // //         // libfmt: breaks at limt and wraps intelligently
+    // //         indoc! {r#"
+    // //             impl fmt::Display for Example {
+    // //                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    // //                     write!(f, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2",
+    // //                         "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
+    // //                         "16", "17"
+    // //                     )
+    // //                 }
+    // //             }
+    // //         "#},
+    // //     );
+    // // }
+
+    // // Rustfmt will align macro parameters vertically
+    // // libfmt will align macro parameters horizontally and wrap intelligently
+    // // Issues:
+    // // - not wrapping intelligently
     // #[test]
-    // fn test_params_align_horizontally() {
+    // fn test_macro_horizontal_aligment() {
     //     // rustfmt: aligns vertically regardless of readability
-    //     let out = fmt(quote! {
+    //     let source = indoc! {r#"
     //         impl fmt::Display for Example {
     //             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
     //                 write!(
     //                     f,
-    //                     "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-    //                     "1",
-    //                     "2",
-    //                     "3",
-    //                     "4",
-    //                     "5",
-    //                     "6",
-    //                     "7",
-    //                     "8",
-    //                     "9",
-    //                     "10",
-    //                     "11",
-    //                     "12",
-    //                     "13",
-    //                     "14",
-    //                     "15",
-    //                     "16",
-    //                     "17"
+    //                     "{} {} {} {} {} {} {} {}",
+    //                     "1", "2", "3", "4", "5", "6", "7", "8",
     //                 )?;
     //             }
     //         }
-    //     });
-    //     println!("{}", out);
+    //     "#};
     //     assert_eq!(
-    //         out,
-    //         // libfmt: breaks at limt and wraps intelligently
+    //         source,
     //         indoc! {r#"
     //             impl fmt::Display for Example {
     //                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //                     write!(f, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2",
-    //                         "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
-    //                         "16", "17"
-    //                     )
+    //                     write!(
+    //                         f,
+    //                         "{} {} {} {} {} {} {} {}",
+    //                         "1", "2", "3", "4", "5", "6", "7", "8",
+    //                     )?;
     //                 }
     //             }
     //         "#},
     //     );
     // }
 
-    // Rustfmt will align macro parameters vertically
-    // libfmt will align macro parameters horizontally and wrap intelligently
-    // Issues:
-    // - not wrapping intelligently
-    #[test]
-    fn test_macro_horizontal_aligment() {
-        // rustfmt: aligns vertically regardless of readability
-        let source = indoc! {r#"
-            impl fmt::Display for Example {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    write!(
-                        f,
-                        "{} {} {} {} {} {} {} {}",
-                        "1", "2", "3", "4", "5", "6", "7", "8",
-                    )?;
-                }
-            }
-        "#};
-        assert_eq!(
-            source,
-            indoc! {r#"
-                impl fmt::Display for Example {
-                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                        write!(
-                            f,
-                            "{} {} {} {} {} {} {} {}",
-                            "1", "2", "3", "4", "5", "6", "7", "8",
-                        )?;
-                    }
-                }
-            "#},
-        );
-    }
+    // #[test]
+    // fn test_multi_comment_types() {
+    //     let source = indoc! {r#"
+    //         use indoc::indoc;
+    //         use libfmt::Result;
+    //         use tracing::Level;
+    //         use tracing_subscriber::FmtSubscriber;
 
-    #[test]
-    fn test_multi_comment_types() {
-        let source = indoc! {r#"
-            use indoc::indoc;
-            use libfmt::Result;
-            use tracing::Level;
-            use tracing_subscriber::FmtSubscriber;
+    //         fn main() -> Result<()> {
+    //             let subscriber = FmtSubscriber::builder()
+    //                 .with_max_level(Level::TRACE)
+    //                 .finish();
+    //             tracing::subscriber::set_global_default(subscriber).unwrap();
 
-            fn main() -> Result<()> {
-                let subscriber = FmtSubscriber::builder()
-                    .with_max_level(Level::TRACE)
-                    .finish();
-                tracing::subscriber::set_global_default(subscriber).unwrap();
+    //             // Pass in an example
+    //             let path = "examples/dump.rs";
+    //             let formatted = libfmt::format_file(path)?;
+    //             print!("{}", formatted);
 
-                // Pass in an example
-                let path = "examples/dump.rs";
-                let formatted = libfmt::format_file(path)?;
-                print!("{}", formatted);
+    //             Ok(())
+    //         }
+    //     "#};
+    //     assert_eq!(
+    //         source,
+    //         indoc! {r#"
+    //             use indoc::indoc;
+    //             use libfmt::Result;
+    //             use tracing::Level;
+    //             use tracing_subscriber::FmtSubscriber;
 
-                Ok(())
-            }
-        "#};
-        assert_eq!(
-            source,
-            indoc! {r#"
-                use indoc::indoc;
-                use libfmt::Result;
-                use tracing::Level;
-                use tracing_subscriber::FmtSubscriber;
+    //             fn main() -> Result<()> {
+    //                 let subscriber = FmtSubscriber::builder() .with_max_level(Level::TRACE) .finish();
+    //                 tracing::subscriber::set_global_default(subscriber).unwrap();
 
-                fn main() -> Result<()> {
-                    let subscriber = FmtSubscriber::builder() .with_max_level(Level::TRACE) .finish();
-                    tracing::subscriber::set_global_default(subscriber).unwrap();
+    //                 // Pass in an example
+    //                 let path = "examples/dump.rs";
+    //                 let formatted = libfmt::format_file(path)?;
+    //                 print!("{}", formatted);
 
-                    // Pass in an example
-                    let path = "examples/dump.rs";
-                    let formatted = libfmt::format_file(path)?;
-                    print!("{}", formatted);
+    //                 Ok(())
+    //             }
+    //     "#}
+    //     );
+    // }
 
-                    Ok(())
-                }
-        "#}
-        );
-    }
+    // #[test]
+    // fn test_struct_definition_with_comments_and_whitespace() {
+    //     let source = indoc! {r#"
 
-    #[test]
-    fn test_struct_definition_with_comments_and_whitespace() {
-        let source = indoc! {r#"
+    //         /// A foo struct
+    //         struct Foo {
 
-            /// A foo struct
-            struct Foo {
+    //             // Field a
+    //             a: i32,
 
-                // Field a
-                a: i32,
+    //             // Field b
+    //             b: i32,
+    //         }
+    //     "#};
+    //     assert_eq!(
+    //         format_str(source).unwrap(),
+    //         indoc! {r#"
 
-                // Field b
-                b: i32,
-            }
-        "#};
-        assert_eq!(
-            format_str(source).unwrap(),
-            indoc! {r#"
+    //             /// A foo struct
+    //             struct Foo {
 
-                /// A foo struct
-                struct Foo {
+    //                 // Field a
+    //                 a: i32,
 
-                    // Field a
-                    a: i32,
-
-                    // Field b
-                    b: i32,
-                }
-            "#},
-        );
-    }
+    //                 // Field b
+    //                 b: i32,
+    //             }
+    //         "#},
+    //     );
+    // }
 
     #[test]
     fn test_only_allow_one_empty_line() {

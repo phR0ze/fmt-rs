@@ -1,4 +1,3 @@
-use indoc::indoc;
 use libfmt::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
