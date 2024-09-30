@@ -26,6 +26,22 @@ impl Comment {
         }
     }
 
+    /// Check if the comment is a line comment
+    pub(crate) fn is_line(&self) -> bool {
+        match self {
+            Self::Line(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if the comment is a inner doc
+    pub(crate) fn is_inner(&self) -> bool {
+        match self {
+            Self::Inner(_) => true,
+            _ => false,
+        }
+    }
+
     /// Check if the comment is an empty line
     pub(crate) fn is_empty_line(&self) -> bool {
         match self {
@@ -101,35 +117,38 @@ fn parse_tokens(
     while let Some(token) = tokens.next() {
         match &token {
             TokenTree::Ident(ident) => {
-                trace!("{}", span_to_str("Ident:", ident.span()));
-                parse_comments(source, comments, &token);
+                let span = ident.span();
+                trace!("{}", span_to_str("Ident:", &span));
+                parse_comments(source, comments, &token, &span);
                 filtered.push(token);
             }
             TokenTree::Literal(literal) => {
-                trace!("{}", span_to_str("Literal:", literal.span()));
-                parse_comments(source, comments, &token);
+                let span = literal.span();
+                trace!("{}", span_to_str("Literal:", &span));
+                parse_comments(source, comments, &token, &span);
                 filtered.push(token);
             }
             TokenTree::Group(group) => {
                 // Start group
                 let open = group.span_open();
-                trace!("{}", span_to_str("Group:", open));
-                parse_comments(source, comments, &token);
+                trace!("{}", span_to_str("Group:", &open));
+                parse_comments(source, comments, &token, &open);
 
                 // Recurse
                 let tokens = parse_tokens(source, group.stream(), comments);
 
                 // End group after recursion
                 let close = group.span_close();
-                trace!("{}", span_to_str("Group:", close));
-                parse_comments(source, comments, &token);
+                trace!("{}", span_to_str("Group:", &close));
+                parse_comments(source, comments, &token, &close);
 
                 let mut _group = Group::new(group.delimiter(), tokens);
                 _group.set_span(group.span());
                 filtered.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
-                trace!("{}", span_to_str("Punct:", punct.span()));
+                let span = punct.span();
+                trace!("{}", span_to_str("Punct:", &span));
 
                 // proc_macro2 recognizes doc comments and stores them as attributes. Punct doc
                 // attributes span the comment starting with '/'; so we can safely skip them as
@@ -144,7 +163,7 @@ fn parse_tokens(
                     }
                 }
 
-                parse_comments(source, comments, &token);
+                parse_comments(source, comments, &token, &span);
                 filtered.push(token);
             }
         }
@@ -154,7 +173,7 @@ fn parse_tokens(
 }
 
 /// Convert the span into a string for debugging purposes
-fn span_to_str(name: &str, span: Span) -> String {
+fn span_to_str(name: &str, span: &Span) -> String {
     let start: Position = span.start().into();
     let end: Position = span.end().into();
     let mut out = String::new();
@@ -179,9 +198,10 @@ fn parse_comments(
     source: &mut Source,
     comments: &mut HashMap<Position, Vec<Comment>>,
     token: &TokenTree,
+    span: &Span,
 ) {
-    let start: Position = token.span_open().start().into();
-    let end: Position = token.span_close().end().into();
+    let start: Position = span.start().into();
+    let end: Position = span.end().into();
 
     // Comments only potentially exist if there are un-accounted for characters in the source at the
     // the given span is skipping over.
@@ -194,22 +214,22 @@ fn parse_comments(
         }
 
         // Extract comments from the string
-        let mut extract_comments = |str: String| {
+        let str = match (source.str(start), token.doc()) {
+            (Some(str), Some(doc)) => Some(str + &doc + "\n"),
+            (Some(str), None) => Some(str),
+            (None, Some(doc)) => Some(doc + "\n"),
+            _ => None,
+        };
+        if let Some(str) = str {
             if !str.is_empty() {
                 if let Some(_comments) = from_str(&str) {
                     for comment in &_comments {
-                        trace!("{}", comment);
+                        trace!("{}, {}", comment, start);
                     }
-                    comments.insert(Position::from(start), _comments);
+                    comments.insert(start, _comments);
                 }
             }
-        };
-        if let Some(str) = source.str(start) {
-            extract_comments(str);
         }
-        if let Some(str) = token.doc() {
-            extract_comments(str);
-        };
     };
 
     // Update the offset to the end of the token
@@ -367,8 +387,6 @@ fn from_str(text: &str) -> Option<Vec<Comment>> {
 /// TokenTree extension methods
 trait TokenTreeExt {
     fn doc(&self) -> Option<String>;
-    fn span_open(&self) -> Span;
-    fn span_close(&self) -> Span;
 }
 
 impl TokenTreeExt for &TokenTree {
@@ -383,20 +401,6 @@ impl TokenTreeExt for &TokenTree {
                 }
             }
             _ => None,
-        }
-    }
-
-    fn span_open(&self) -> Span {
-        match self {
-            TokenTree::Group(group) => group.span_open(),
-            _ => self.span(),
-        }
-    }
-
-    fn span_close(&self) -> Span {
-        match self {
-            TokenTree::Group(group) => group.span_close(),
-            _ => self.span(),
         }
     }
 }
@@ -415,71 +419,75 @@ mod tests {
         pre_process(src, tokens, collection);
     }
 
-    // #[traced_test]
-    // #[test]
-    // fn test_doc_comments() {
-    //     let source = indoc! {r#"
+    #[test]
+    fn test_multi_comment_types() {
+        let source = indoc! {r#"
+            use indoc::indoc;
 
-    //          /// A foo
-    //         struct Foo {
+            fn main() -> Result<()> {
+                let subscriber = FmtSubscriber::builder()
+                    .with_max_level(Level::TRACE)
+                    .finish();
+                tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    //             /// Field
-    //             field: i32,
-    //         }
-    //     "#};
-    //     let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-    //     pre_process_comments(source, &mut comments);
+                // Pass in an example
+                let path = "examples/dump.rs";
 
-    //     assert_eq!(comments.len(), 2);
+                Ok(())
+            }
+        "#};
+        let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
+        pre_process_comments(source, &mut comments);
 
-    //     let comments1 = &comments[&pos(2, 0)];
-    //     // assert_eq!(comments1.len(), 1);
-    //     // assert_eq!(comments1[0].is_empty_line(), true);
+        assert_eq!(comments.len(), 3);
 
-    //     // let comments2 = &comments[&LineColumn { line: 5, column: 0 }];
-    //     // assert_eq!(comments2.len(), 1);
-    //     // assert_eq!(comments2[0].is_empty_line(), true);
-    // }
+        let comments1 = &comments[&pos(2, 0)];
+        assert_eq!(comments1.len(), 1);
+        assert_eq!(comments1[0].is_empty_line(), true);
 
-    // #[test]
-    // fn test_multi_comment_types() {
-    //     let source = indoc! {r#"
-    //         use indoc::indoc;
+        let comments2 = &comments[&pos(9, 4)];
+        assert_eq!(comments2.len(), 2);
+        assert_eq!(comments2[0].is_empty_line(), true);
+        assert_eq!(comments2[1].is_line(), true);
+        assert_eq!(
+            comments2[1].text(),
+            "    // Pass in an example\n".to_string()
+        );
 
-    //         fn main() -> Result<()> {
-    //             let subscriber = FmtSubscriber::builder()
-    //                 .with_max_level(Level::TRACE)
-    //                 .finish();
-    //             tracing::subscriber::set_global_default(subscriber).unwrap();
+        let comments3 = &comments[&pos(11, 4)];
+        assert_eq!(comments3.len(), 1);
+        assert_eq!(comments3[0].is_empty_line(), true);
+    }
 
-    //             // Pass in an example
-    //             let path = "examples/dump.rs";
+    #[traced_test]
+    #[test]
+    fn test_doc_comments() {
+        let source = indoc! {r#"
 
-    //             Ok(())
-    //         }
-    //     "#};
-    //     let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-    //     pre_process_comments(source, &mut comments);
+             /// A foo
+            struct Foo {
 
-    //     assert_eq!(comments.len(), 4);
+                /// Field
+                field: i32,
+            }
+        "#};
+        let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
+        pre_process_comments(source, &mut comments);
 
-    //     // Validate the comments
-    //     // let comments1 = &comments[&pos(6, 0)];
-    //     // assert_eq!(comments1.len(), 1);
-    //     // assert_eq!(comments1[0].is_empty_line(), true);
+        assert_eq!(comments.len(), 2);
 
-    //     // let comments2 = &comments[&pos(13, 4)];
-    //     // assert_eq!(comments2.len(), 2);
-    //     // assert_eq!(comments2[0].is_empty_line(), true);
-    //     // assert_eq!(
-    //     //     comments2[1].text(),
-    //     //     "    // Pass in an example\n".to_string()
-    //     // );
+        let comments1 = &comments[&pos(1, 1)];
+        assert_eq!(comments1.len(), 2);
+        assert_eq!(comments1[0].is_empty_line(), true);
+        assert_eq!(comments1[1].is_inner(), true);
+        assert_eq!(comments1[1].text(), " /// A foo\n".to_string());
 
-    //     // let comments3 = &comments[&pos(17, 4)];
-    //     // assert_eq!(comments3.len(), 1);
-    //     // assert_eq!(comments3[0].is_empty_line(), true);
-    // }
+        let comments2 = &comments[&pos(4, 4)];
+        assert_eq!(comments2.len(), 2);
+        assert_eq!(comments2[0].is_empty_line(), true);
+        assert_eq!(comments2[1].is_inner(), true);
+        assert_eq!(comments2[1].text(), "    /// Field\n".to_string());
+    }
 
     #[traced_test]
     #[test]

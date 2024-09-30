@@ -208,36 +208,36 @@ mod tests {
     //     );
     // }
 
-    // #[test]
-    // fn test_struct_definition_with_comments_and_whitespace() {
-    //     let source = indoc! {r#"
+    #[test]
+    fn test_struct_definition_with_comments_and_whitespace() {
+        let source = indoc! {r#"
 
-    //         /// A foo struct
-    //         struct Foo {
+            /// A foo struct
+            struct Foo {
 
-    //             // Field a
-    //             a: i32,
+                // Field a
+                a: i32,
 
-    //             // Field b
-    //             b: i32,
-    //         }
-    //     "#};
-    //     assert_eq!(
-    //         format_str(source).unwrap(),
-    //         indoc! {r#"
+                // Field b
+                b: i32,
+            }
+        "#};
+        assert_eq!(
+            format_str(source).unwrap(),
+            indoc! {r#"
 
-    //             /// A foo struct
-    //             struct Foo {
+                /// A foo struct
+                struct Foo {
 
-    //                 // Field a
-    //                 a: i32,
+                    // Field a
+                    a: i32,
 
-    //                 // Field b
-    //                 b: i32,
-    //             }
-    //         "#},
-    //     );
-    // }
+                    // Field b
+                    b: i32,
+                }
+            "#},
+        );
+    }
 
     #[test]
     fn test_only_allow_one_empty_line() {
