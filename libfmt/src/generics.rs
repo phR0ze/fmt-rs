@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::INDENT;
 use proc_macro2::TokenStream;
 use std::ptr;
 use syn::{
@@ -43,7 +42,7 @@ impl Engine {
             }
         }
 
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(">");
     }
@@ -83,7 +82,7 @@ impl Engine {
     fn type_param(&mut self, type_param: &TypeParam) {
         self.outer_attrs(&type_param.attrs);
         self.ident(&type_param.ident);
-        self.scan_begin_inconsistent(INDENT);
+        self.scan_begin_inconsistent(self.config.indent);
         for type_param_bound in type_param.bounds.iter().delimited() {
             if type_param_bound.is_first {
                 self.scan_string(": ");
@@ -298,7 +297,7 @@ impl Engine {
         };
         if hardbreaks {
             self.hardbreak();
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_string("where");
             self.hardbreak();
             for predicate in where_clause.predicates.iter().delimited() {
@@ -311,11 +310,11 @@ impl Engine {
                 }
             }
             if !semi {
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
             }
         } else {
             self.space();
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_string("where");
             self.space();
             for predicate in where_clause.predicates.iter().delimited() {
@@ -327,7 +326,7 @@ impl Engine {
                 }
             }
             if !semi {
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
             }
         }
     }
@@ -350,7 +349,7 @@ impl Engine {
         if predicate.bounds.len() == 1 {
             self.scan_begin_inconsistent(0);
         } else {
-            self.scan_begin_inconsistent(INDENT);
+            self.scan_begin_inconsistent(self.config.indent);
         }
         for type_param_bound in predicate.bounds.iter().delimited() {
             if type_param_bound.is_first {
@@ -367,7 +366,7 @@ impl Engine {
     fn predicate_lifetime(&mut self, predicate: &PredicateLifetime) {
         self.lifetime(&predicate.lifetime);
         self.scan_string(":");
-        self.scan_begin_inconsistent(INDENT);
+        self.scan_begin_inconsistent(self.config.indent);
         for lifetime in predicate.bounds.iter().delimited() {
             if lifetime.is_first {
                 self.nbsp();

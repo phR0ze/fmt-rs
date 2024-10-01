@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::INDENT;
 use proc_macro2::TokenStream;
 use syn::{
     FieldPat, Pat, PatIdent, PatOr, PatParen, PatReference, PatRest, PatSlice, PatStruct, PatTuple,
@@ -108,7 +107,7 @@ impl Engine {
 
     fn pat_struct(&mut self, pat: &PatStruct) {
         self.outer_attrs(&pat.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.path(&pat.path, PathKind::Expr);
         self.scan_string(" {");
         self.space_if_nonempty();
@@ -120,7 +119,7 @@ impl Engine {
             self.pat_rest(rest);
             self.space();
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
     }
@@ -128,7 +127,7 @@ impl Engine {
     fn pat_tuple(&mut self, pat: &PatTuple) {
         self.outer_attrs(&pat.attrs);
         self.scan_string("(");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
@@ -141,7 +140,7 @@ impl Engine {
                 self.trailing_comma(elem.is_last);
             }
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
     }
@@ -150,13 +149,13 @@ impl Engine {
         self.outer_attrs(&pat.attrs);
         self.path(&pat.path, PathKind::Expr);
         self.scan_string("(");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             self.trailing_comma(elem.is_last);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
     }
@@ -230,7 +229,7 @@ impl Engine {
             }
             PatVerbatim::Const(pat) => {
                 self.scan_string("const ");
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
                 self.small_block(&pat.block, &pat.attrs);
                 self.scan_end();
             }

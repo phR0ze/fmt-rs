@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::INDENT;
 use proc_macro2::TokenStream;
 use syn::{
     Abi, BareFnArg, BareVariadic, ReturnType, Type, TypeArray, TypeBareFn, TypeGroup,
@@ -52,7 +51,7 @@ impl Engine {
             self.abi(abi);
         }
         self.scan_string("fn(");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.zerobreak();
         for bare_fn_arg in ty.inputs.iter().delimited() {
             self.bare_fn_arg(&bare_fn_arg);
@@ -62,7 +61,7 @@ impl Engine {
             self.bare_variadic(variadic);
             self.zerobreak();
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
         self.return_type(&ty.output);
@@ -147,7 +146,7 @@ impl Engine {
 
     fn type_tuple(&mut self, ty: &TypeTuple) {
         self.scan_string("(");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.zerobreak();
         for elem in ty.elems.iter().delimited() {
             self.ty(&elem);
@@ -158,7 +157,7 @@ impl Engine {
                 self.trailing_comma(elem.is_last);
             }
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
     }
@@ -253,7 +252,7 @@ impl Engine {
                 self.scan_string("...");
             }
             TypeVerbatim::AnonStruct(ty) => {
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
                 self.scan_string("struct {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {
@@ -261,12 +260,12 @@ impl Engine {
                     self.scan_string(",");
                     self.hardbreak();
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             }
             TypeVerbatim::AnonUnion(ty) => {
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
                 self.scan_string("union {");
                 self.hardbreak_if_nonempty();
                 for field in &ty.fields.named {
@@ -274,7 +273,7 @@ impl Engine {
                     self.scan_string(",");
                     self.hardbreak();
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             }

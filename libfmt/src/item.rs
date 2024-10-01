@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::INDENT;
 use proc_macro2::TokenStream;
 use syn::{
     Fields, FnArg, ForeignItem, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
@@ -55,7 +54,7 @@ impl Engine {
 
     fn item_enum(&mut self, item: &ItemEnum) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("enum ");
         self.ident(&item.ident);
@@ -68,7 +67,7 @@ impl Engine {
             self.scan_string(",");
             self.hardbreak();
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -89,7 +88,7 @@ impl Engine {
 
     fn item_fn(&mut self, item: &ItemFn) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
@@ -99,7 +98,7 @@ impl Engine {
         for stmt in &item.block.stmts {
             self.stmt(stmt);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -107,7 +106,7 @@ impl Engine {
 
     fn item_foreign_mod(&mut self, item: &ItemForeignMod) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         if item.unsafety.is_some() {
             self.scan_string("unsafe ");
         }
@@ -118,7 +117,7 @@ impl Engine {
         for foreign_item in &item.items {
             self.foreign_item(foreign_item);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -126,9 +125,9 @@ impl Engine {
 
     fn item_impl(&mut self, item: &ItemImpl) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
-        self.scan_begin_inconsistent(-INDENT);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_inconsistent(-self.config.indent);
+        self.scan_begin_consistent(self.config.indent);
         if item.defaultness.is_some() {
             self.scan_string("default ");
         }
@@ -156,7 +155,7 @@ impl Engine {
         for impl_item in &item.items {
             self.impl_item(impl_item);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -171,7 +170,7 @@ impl Engine {
 
     fn item_mod(&mut self, item: &ItemMod) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         if item.unsafety.is_some() {
             self.scan_string("unsafe ");
@@ -185,7 +184,7 @@ impl Engine {
             for item in items {
                 self.item(item);
             }
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_end();
             self.scan_string("}");
         } else {
@@ -214,7 +213,7 @@ impl Engine {
 
     fn item_struct(&mut self, item: &ItemStruct) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("struct ");
         self.ident(&item.ident);
@@ -229,7 +228,7 @@ impl Engine {
                     self.scan_string(",");
                     self.hardbreak();
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             }
@@ -248,7 +247,7 @@ impl Engine {
 
     fn item_trait(&mut self, item: &ItemTrait) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         if item.unsafety.is_some() {
             self.scan_string("unsafe ");
@@ -274,7 +273,7 @@ impl Engine {
         for trait_item in &item.items {
             self.trait_item(trait_item);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -282,7 +281,7 @@ impl Engine {
 
     fn item_trait_alias(&mut self, item: &ItemTraitAlias) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("trait ");
         self.ident(&item.ident);
@@ -303,7 +302,7 @@ impl Engine {
 
     fn item_type(&mut self, item: &ItemType) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("type ");
         self.ident(&item.ident);
@@ -311,7 +310,7 @@ impl Engine {
         self.where_clause_oneline(&item.generics.where_clause);
         self.scan_string("= ");
         self.neverbreak();
-        self.scan_begin_inconsistent(-INDENT);
+        self.scan_begin_inconsistent(-self.config.indent);
         self.ty(&item.ty);
         self.scan_end();
         self.scan_string(";");
@@ -321,7 +320,7 @@ impl Engine {
 
     fn item_union(&mut self, item: &ItemUnion) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("union ");
         self.ident(&item.ident);
@@ -334,7 +333,7 @@ impl Engine {
             self.scan_string(",");
             self.hardbreak();
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -588,9 +587,9 @@ impl Engine {
             }
             ItemVerbatim::ImplFlexible(item) => {
                 self.outer_attrs(&item.attrs);
-                self.scan_begin_consistent(INDENT);
-                self.scan_begin_inconsistent(-INDENT);
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
+                self.scan_begin_inconsistent(-self.config.indent);
+                self.scan_begin_consistent(self.config.indent);
                 self.visibility(&item.vis);
                 if item.defaultness {
                     self.scan_string("default ");
@@ -624,7 +623,7 @@ impl Engine {
                 for impl_item in &item.items {
                     self.impl_item(impl_item);
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
                 self.hardbreak();
@@ -636,26 +635,26 @@ impl Engine {
                 self.ident(&item.ident);
                 if let Some(args) = &item.args {
                     self.scan_string("(");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     self.scan_begin_inconsistent(0);
                     self.macro_rules_tokens(args.clone(), true);
                     self.scan_end();
                     self.zerobreak();
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string(")");
                 }
                 self.scan_string(" {");
                 if !item.body.is_empty() {
                     self.neverbreak();
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.hardbreak();
                     self.scan_begin_inconsistent(0);
                     self.macro_rules_tokens(item.body.clone(), false);
                     self.scan_end();
                     self.hardbreak();
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                 }
                 self.scan_string("}");
@@ -675,7 +674,7 @@ impl Engine {
                     self.scan_string("::");
                     self.use_tree(&item.trees[0].inner);
                 } else {
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.scan_string("{");
                     self.zerobreak();
                     self.scan_begin_inconsistent(0);
@@ -699,7 +698,7 @@ impl Engine {
                     }
                     self.scan_end();
                     self.trailing_comma(true);
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_string("}");
                     self.scan_end();
                 }
@@ -751,7 +750,7 @@ impl Engine {
         {
             self.use_tree(&use_group.items[0]);
         } else {
-            self.scan_begin_consistent(INDENT);
+            self.scan_begin_consistent(self.config.indent);
             self.scan_string("{");
             self.zerobreak();
             self.scan_begin_inconsistent(0);
@@ -772,7 +771,7 @@ impl Engine {
             }
             self.scan_end();
             self.trailing_comma(true);
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_string("}");
             self.scan_end();
         }
@@ -792,7 +791,7 @@ impl Engine {
 
     fn foreign_item_fn(&mut self, foreign_item: &ForeignItemFn) {
         self.outer_attrs(&foreign_item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&foreign_item.vis);
         self.signature(&foreign_item.sig);
         self.where_clause_semi(&foreign_item.sig.generics.where_clause);
@@ -952,7 +951,7 @@ impl Engine {
 
     fn trait_item_fn(&mut self, trait_item: &TraitItemFn) {
         self.outer_attrs(&trait_item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.signature(&trait_item.sig);
         if let Some(block) = &trait_item.default {
             self.where_clause_for_body(&trait_item.sig.generics.where_clause);
@@ -962,7 +961,7 @@ impl Engine {
             for stmt in &block.stmts {
                 self.stmt(stmt);
             }
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_end();
             self.scan_string("}");
         } else {
@@ -974,7 +973,7 @@ impl Engine {
 
     fn trait_item_type(&mut self, trait_item: &TraitItemType) {
         self.outer_attrs(&trait_item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.scan_string("type ");
         self.ident(&trait_item.ident);
         self.generics(&trait_item.generics);
@@ -990,7 +989,7 @@ impl Engine {
         if let Some((_eq_token, default)) = &trait_item.default {
             self.scan_string(" = ");
             self.neverbreak();
-            self.scan_begin_inconsistent(-INDENT);
+            self.scan_begin_inconsistent(-self.config.indent);
             self.ty(default);
             self.scan_end();
         }
@@ -1144,7 +1143,7 @@ impl Engine {
 
     fn impl_item_fn(&mut self, impl_item: &ImplItemFn) {
         self.outer_attrs(&impl_item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&impl_item.vis);
         if impl_item.defaultness.is_some() {
             self.scan_string("default ");
@@ -1157,7 +1156,7 @@ impl Engine {
         for stmt in &impl_item.block.stmts {
             self.stmt(stmt);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.hardbreak();
@@ -1165,7 +1164,7 @@ impl Engine {
 
     fn impl_item_type(&mut self, impl_item: &ImplItemType) {
         self.outer_attrs(&impl_item.attrs);
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.visibility(&impl_item.vis);
         if impl_item.defaultness.is_some() {
             self.scan_string("default ");
@@ -1175,7 +1174,7 @@ impl Engine {
         self.generics(&impl_item.generics);
         self.scan_string(" = ");
         self.neverbreak();
-        self.scan_begin_inconsistent(-INDENT);
+        self.scan_begin_inconsistent(-self.config.indent);
         self.ty(&impl_item.ty);
         self.scan_end();
         self.where_clause_oneline_semi(&impl_item.generics.where_clause);
@@ -1306,10 +1305,10 @@ impl Engine {
             self.variadic(variadic);
             self.zerobreak();
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
-        self.scan_begin_consistent(-INDENT);
+        self.scan_begin_consistent(-self.config.indent);
         self.return_type(&signature.output);
         self.scan_end();
     }
@@ -1379,7 +1378,6 @@ impl Engine {
 mod verbatim {
     use crate::engine::Engine;
     use crate::iter::IterDelimited;
-    use crate::INDENT;
     use syn::ext::IdentExt;
     use syn::parse::{ParseStream, Result};
     use syn::{
@@ -1604,7 +1602,7 @@ mod verbatim {
     impl Engine {
         pub fn flexible_item_const(&mut self, item: &FlexibleItemConst) {
             self.outer_attrs(&item.attrs);
-            self.scan_begin_consistent(INDENT);
+            self.scan_begin_consistent(self.config.indent);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1613,13 +1611,13 @@ mod verbatim {
             self.ident(&item.ident);
             self.generics(&item.generics);
             self.scan_string(": ");
-            self.scan_begin_consistent(-INDENT);
+            self.scan_begin_consistent(-self.config.indent);
             self.ty(&item.ty);
             self.scan_end();
             if let Some(value) = &item.value {
                 self.scan_string(" = ");
                 self.neverbreak();
-                self.scan_begin_inconsistent(-INDENT);
+                self.scan_begin_inconsistent(-self.config.indent);
                 self.expr(value);
                 self.scan_end();
             }
@@ -1630,7 +1628,7 @@ mod verbatim {
 
         pub fn flexible_item_fn(&mut self, item: &FlexibleItemFn) {
             self.outer_attrs(&item.attrs);
-            self.scan_begin_consistent(INDENT);
+            self.scan_begin_consistent(self.config.indent);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1644,7 +1642,7 @@ mod verbatim {
                 for stmt in body {
                     self.stmt(stmt);
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             } else {
@@ -1677,7 +1675,7 @@ mod verbatim {
 
         pub fn flexible_item_type(&mut self, item: &FlexibleItemType) {
             self.outer_attrs(&item.attrs);
-            self.scan_begin_consistent(INDENT);
+            self.scan_begin_consistent(self.config.indent);
             self.visibility(&item.vis);
             if item.defaultness {
                 self.scan_string("default ");
@@ -1698,7 +1696,7 @@ mod verbatim {
                 self.where_clause_oneline(&item.generics.where_clause);
                 self.scan_string("= ");
                 self.neverbreak();
-                self.scan_begin_inconsistent(-INDENT);
+                self.scan_begin_inconsistent(-self.config.indent);
                 self.ty(definition);
                 self.scan_end();
                 self.where_clause_oneline_semi(&item.where_clause_after_eq);

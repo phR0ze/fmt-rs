@@ -1,6 +1,5 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
-use crate::INDENT;
 use std::ptr;
 use syn::{
     AngleBracketedGenericArguments, AssocConst, AssocType, Constraint, Expr, GenericArgument,
@@ -85,7 +84,7 @@ impl Engine {
             self.scan_string("::");
         }
         self.scan_string("<");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.zerobreak();
 
         // Print lifetimes before types/consts/bindings, regardless of their
@@ -117,7 +116,7 @@ impl Engine {
             }
         }
 
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string(">");
     }
@@ -145,7 +144,7 @@ impl Engine {
         if let Some(generics) = &constraint.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.scan_begin_inconsistent(INDENT);
+        self.scan_begin_inconsistent(self.config.indent);
         for bound in constraint.bounds.iter().delimited() {
             if bound.is_first {
                 self.scan_string(": ");
@@ -159,14 +158,14 @@ impl Engine {
     }
 
     fn parenthesized_generic_arguments(&mut self, arguments: &ParenthesizedGenericArguments) {
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.scan_string("(");
         self.zerobreak();
         for ty in arguments.inputs.iter().delimited() {
             self.ty(&ty);
             self.trailing_comma(ty.is_last);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_string(")");
         self.return_type(&arguments.output);
         self.scan_end();

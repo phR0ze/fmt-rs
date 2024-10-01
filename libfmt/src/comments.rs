@@ -1,6 +1,9 @@
-use crate::model::{CharExt, Position, Source};
+use crate::{
+    model::{CharExt, Position, Source},
+    Error, Result,
+};
 use proc_macro2::{Group, LineColumn, Span, TokenStream, TokenTree};
-use std::collections::HashMap;
+use std::{collections::HashMap, str::FromStr};
 use tracing::{span, trace};
 
 /// Encapsulate the different types of comments that can be found in the source
@@ -93,10 +96,13 @@ impl std::fmt::Display for Comment {
 /// * ***collection***: Resulting collection of comments
 pub(crate) fn pre_process(
     source: &str,
-    tokens: TokenStream,
     comments: &mut HashMap<Position, Vec<Comment>>,
-) -> TokenStream {
-    parse_tokens(&mut Source::new(source), tokens, comments)
+) -> Result<TokenStream> {
+    // Parse source into token stream
+    let tokens = TokenStream::from_str(source)
+        .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
+
+    Ok(parse_tokens(&mut Source::new(source), tokens, comments))
 }
 
 /// Recursively parses tokens to find comments and store them in the collection
@@ -147,6 +153,7 @@ fn parse_tokens(
                 filtered.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
+                filtered.push(token.clone());
                 let span = punct.span();
                 trace!("{}", span_to_str("Punct:", &span));
 
@@ -159,12 +166,15 @@ fn parse_tokens(
                         .filter(|x| x.span().start() < punct.span().end())
                         .is_some()
                     {
-                        tokens.next();
+                        // skip from a comment perspective but retain to ensure the token stream
+                        // is not broken.
+                        if let Some(token) = tokens.next() {
+                            filtered.push(token);
+                        }
                     }
                 }
 
                 parse_comments(source, comments, &token, &span);
-                filtered.push(token);
             }
         }
     }
@@ -414,11 +424,6 @@ mod tests {
     use std::str::FromStr;
     use tracing_test::traced_test;
 
-    fn pre_process_comments(src: &str, collection: &mut HashMap<Position, Vec<Comment>>) {
-        let tokens = TokenStream::from_str(src).unwrap();
-        pre_process(src, tokens, collection);
-    }
-
     #[test]
     fn test_multi_comment_types() {
         let source = indoc! {r#"
@@ -437,7 +442,7 @@ mod tests {
             }
         "#};
         let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process_comments(source, &mut comments);
+        pre_process(source, &mut comments);
 
         assert_eq!(comments.len(), 3);
 
@@ -464,29 +469,40 @@ mod tests {
     fn test_doc_comments() {
         let source = indoc! {r#"
 
-             /// A foo
+             /// A foo struct
             struct Foo {
 
-                /// Field
-                field: i32,
+                /// Field a
+                a: i32,
+
+                /// Field b
+                b: i32,
             }
         "#};
         let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process_comments(source, &mut comments);
+        pre_process(source, &mut comments).unwrap();
 
-        assert_eq!(comments.len(), 2);
+        assert_eq!(comments.len(), 3);
 
+        // Inner comments are stored based on the actual line not the code after.
+        // This is different than other comments and mighte be something to consider later.
         let comments1 = &comments[&pos(1, 1)];
         assert_eq!(comments1.len(), 2);
         assert_eq!(comments1[0].is_empty_line(), true);
         assert_eq!(comments1[1].is_inner(), true);
-        assert_eq!(comments1[1].text(), " /// A foo\n".to_string());
+        assert_eq!(comments1[1].text(), " /// A foo struct\n".to_string());
 
         let comments2 = &comments[&pos(4, 4)];
         assert_eq!(comments2.len(), 2);
         assert_eq!(comments2[0].is_empty_line(), true);
         assert_eq!(comments2[1].is_inner(), true);
-        assert_eq!(comments2[1].text(), "    /// Field\n".to_string());
+        assert_eq!(comments2[1].text(), "    /// Field a\n".to_string());
+
+        let comments3 = &comments[&pos(7, 4)];
+        assert_eq!(comments3.len(), 2);
+        assert_eq!(comments3[0].is_empty_line(), true);
+        assert_eq!(comments3[1].is_inner(), true);
+        assert_eq!(comments3[1].text(), "    /// Field b\n".to_string());
     }
 
     #[traced_test]
@@ -501,7 +517,7 @@ mod tests {
             use foo3;
         "#};
         let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process_comments(source, &mut comments);
+        pre_process(source, &mut comments);
 
         assert_eq!(comments.len(), 2);
 

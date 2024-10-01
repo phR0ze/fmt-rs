@@ -5,7 +5,6 @@ use crate::{
     comments::{self, Comment},
     model::*,
 };
-use crate::{MARGIN, MIN_SPACE};
 use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -51,6 +50,9 @@ pub(crate) const SIZE_INFINITY: isize = 0xffff;
 /// than 3N tokens apart, because once there’s “obviously” too much data to fit on a line, in a size
 /// calculation, SCAN will write “infinity” to the size and let PRINT consume it.
 pub struct Engine {
+    /// Formatting configuration
+    pub(crate) config: Config,
+
     /// Original input source
     pub(crate) src: String,
 
@@ -100,11 +102,13 @@ pub struct Engine {
 }
 
 impl Engine {
-    pub fn new(source: &str) -> Self {
+    pub fn new(source: &str, config: Config) -> Self {
+        let margin = config.margin;
         Self {
+            config,
             src: source.into(),
             out: String::new(),
-            space: MARGIN,
+            space: margin,
             scan_buf: RingBuffer::new(),
             left_total: 0,
             right_total: 0,
@@ -130,9 +134,11 @@ impl Engine {
     /// Search the stored comments for a match for the given span location by Position
     /// * ***span***: location in the source string to search for a comment
     pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
-        if let Some(comments) = self.comments.remove(&Position::from(span.start())) {
-            for comment in comments {
-                self.scan_string(comment.text());
+        if self.config.comments {
+            if let Some(comments) = self.comments.remove(&Position::from(span.start())) {
+                for comment in comments {
+                    self.scan_string(comment.text());
+                }
             }
         }
     }
@@ -476,7 +482,7 @@ impl Engine {
             self.out.push('\n');
             let indent = self.indent as isize + token.offset;
             self.pending_indentation = usize::try_from(indent).unwrap();
-            self.space = cmp::max(MARGIN - indent, MIN_SPACE);
+            self.space = cmp::max(self.config.margin - indent, self.config.min_space);
             if let Some(post_break) = token.post_break {
                 self.print_indent();
                 self.out.push(post_break);

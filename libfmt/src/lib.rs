@@ -1,6 +1,5 @@
 mod attr;
 pub(crate) mod comments;
-mod config;
 mod convenience;
 mod data;
 mod engine;
@@ -22,12 +21,12 @@ mod ty;
 use comments::Comment;
 use core::str::FromStr;
 pub(crate) use engine::Engine;
+use model::Config;
 use proc_macro2::{LineColumn, TokenStream};
 use std::{collections::HashMap, path::Path};
 use tracing::trace;
 
 // Re-export the public API
-pub use config::*;
 pub use error::{Error, Result};
 
 /// Format the given source file
@@ -35,12 +34,12 @@ pub fn format_file<T: AsRef<Path>>(path: T) -> Result<String> {
     let path = path.as_ref();
     let source = std::fs::read_to_string(path)
         .map_err(|e| Error::new("failed to read source file").wrap_io(e))?;
-    format_str(&source)
+    format_str(&source, Some(Config::new().with_no_comments()))
 }
 
 /// Format the given source string
-pub fn format_str(source: &str) -> Result<String> {
-    let mut engine = Engine::new(source);
+pub fn format_str(source: &str, config: Option<Config>) -> Result<String> {
+    let mut engine = Engine::new(source, config.unwrap_or_default());
     engine.format()?;
     Ok(engine.print())
 }
@@ -49,12 +48,8 @@ impl Engine {
     pub(crate) fn format(&mut self) -> Result<()> {
         trace!("Formatting");
 
-        // Parse source into token stream
-        let tokens = TokenStream::from_str(&self.src)
-            .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
-
         // Pre-process the token stream for comment locational information
-        let tokens = comments::pre_process(&self.src, tokens, &mut self.comments);
+        let tokens = comments::pre_process(&self.src, &mut self.comments)?;
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
@@ -223,7 +218,7 @@ mod tests {
             }
         "#};
         assert_eq!(
-            format_str(source).unwrap(),
+            format_str(source, Some(Config::new().with_no_comments())).unwrap(),
             indoc! {r#"
 
                 /// A foo struct
@@ -248,7 +243,7 @@ mod tests {
         "#};
 
         assert_eq!(
-            format_str(source).unwrap(),
+            format_str(source, None).unwrap(),
             indoc! {r#"
                 
                 println!("{}", "1");
@@ -263,7 +258,7 @@ mod tests {
         "#};
 
         assert_eq!(
-            format_str(source).unwrap(),
+            format_str(source, None).unwrap(),
             indoc! {r#"
                 println!("{}", "1");
             "#}

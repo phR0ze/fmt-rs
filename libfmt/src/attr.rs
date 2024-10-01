@@ -1,6 +1,5 @@
 use crate::path::PathKind;
 use crate::Engine;
-use crate::INDENT;
 use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use syn::{AttrStyle, Attribute, Expr, Lit, MacroDelimiter, Meta, MetaList, MetaNameValue};
 
@@ -160,7 +159,7 @@ impl Engine {
                     match delimiter {
                         Delimiter::Parenthesis => {
                             self.scan_string("(");
-                            self.scan_begin_consistent(INDENT);
+                            self.scan_begin_consistent(self.config.indent);
                             self.zerobreak();
                             state = Punct;
                         }
@@ -183,7 +182,7 @@ impl Engine {
                             if state != TrailingComma {
                                 self.zerobreak();
                             }
-                            self.offset(-INDENT);
+                            self.offset(-self.config.indent);
                             self.scan_end();
                             self.scan_string(")");
                             state = Punct;

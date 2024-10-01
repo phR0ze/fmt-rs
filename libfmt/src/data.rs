@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::INDENT;
 use syn::{Field, Fields, FieldsUnnamed, Variant, VisRestricted, Visibility};
 
 impl Engine {
@@ -12,18 +11,18 @@ impl Engine {
             Fields::Named(fields) => {
                 self.nbsp();
                 self.scan_string("{");
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
                 self.space();
                 for field in fields.named.iter().delimited() {
                     self.field(&field);
                     self.trailing_comma_or_space(field.is_last);
                 }
-                self.offset(-INDENT);
+                self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             }
             Fields::Unnamed(fields) => {
-                self.scan_begin_consistent(INDENT);
+                self.scan_begin_consistent(self.config.indent);
                 self.fields_unnamed(fields);
                 self.scan_end();
             }
@@ -42,7 +41,7 @@ impl Engine {
             self.field(&field);
             self.trailing_comma(field.is_last);
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_string(")");
     }
 

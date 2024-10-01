@@ -1,7 +1,6 @@
 use crate::engine::Engine;
 use crate::path::PathKind;
 use crate::token::Token;
-use crate::INDENT;
 use proc_macro2::{Delimiter, Spacing, TokenStream};
 use syn::{Ident, Macro, MacroDelimiter};
 
@@ -43,7 +42,7 @@ impl Engine {
 
         // Scan the macro body tokens
         if !mac.tokens.is_empty() {
-            self.scan_begin_consistent(INDENT);
+            self.scan_begin_consistent(self.config.indent);
 
             // libfmt: control brace_style for macro
             // if !INVOKATION_BRACE_STYLE_SAME_LINE {
@@ -61,7 +60,7 @@ impl Engine {
             // }
 
             // Reset offset back to macro root level
-            self.offset(-INDENT);
+            self.offset(-self.config.indent);
             self.scan_end();
         }
 
@@ -90,7 +89,7 @@ impl Engine {
         self.scan_string("macro_rules! ");
         self.ident(name);
         self.scan_string(" {");
-        self.scan_begin_consistent(INDENT);
+        self.scan_begin_consistent(self.config.indent);
         self.hardbreak_if_nonempty();
         let mut state = State::Start;
         for tt in rules.clone() {
@@ -99,13 +98,13 @@ impl Engine {
                 (Start, Token::Group(delimiter, stream)) => {
                     self.delimiter_open(delimiter);
                     if !stream.is_empty() {
-                        self.scan_begin_consistent(INDENT);
+                        self.scan_begin_consistent(self.config.indent);
                         self.zerobreak();
                         self.scan_begin_inconsistent(0);
                         self.macro_rules_tokens(stream, true);
                         self.scan_end();
                         self.zerobreak();
-                        self.offset(-INDENT);
+                        self.offset(-self.config.indent);
                         self.scan_end();
                     }
                     self.delimiter_close(delimiter);
@@ -123,13 +122,13 @@ impl Engine {
                     self.scan_string(" {");
                     self.neverbreak();
                     if !stream.is_empty() {
-                        self.scan_begin_consistent(INDENT);
+                        self.scan_begin_consistent(self.config.indent);
                         self.hardbreak();
                         self.scan_begin_inconsistent(0);
                         self.macro_rules_tokens(stream, false);
                         self.scan_end();
                         self.hardbreak();
-                        self.offset(-INDENT);
+                        self.offset(-self.config.indent);
                         self.scan_end();
                     }
                     self.scan_string("}");
@@ -151,7 +150,7 @@ impl Engine {
             }
             _ => self.hardbreak(),
         }
-        self.offset(-INDENT);
+        self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
     }
@@ -255,7 +254,6 @@ mod standard_library {
     use crate::engine::Engine;
     use crate::iter::IterDelimited;
     use crate::path::PathKind;
-    use crate::INDENT;
     use syn::ext::IdentExt;
     use syn::parse::{Parse, ParseStream, Parser, Result};
     use syn::{
@@ -570,23 +568,23 @@ mod standard_library {
             match &known_macro {
                 KnownMacro::Expr(expr) => {
                     self.scan_string("(");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     self.expr(expr);
                     self.zerobreak();
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string(")");
                 }
                 KnownMacro::Exprs(exprs) => {
                     self.scan_string("(");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     for elem in exprs.iter().delimited() {
                         self.expr(&elem);
                         self.trailing_comma(elem.is_last);
                     }
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string(")");
                 }
@@ -597,7 +595,7 @@ mod standard_library {
                 }
                 KnownMacro::Matches(matches) => {
                     self.scan_string("(");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     self.expr(&matches.expression);
                     self.scan_string(",");
@@ -609,13 +607,13 @@ mod standard_library {
                         self.expr(guard);
                     }
                     self.zerobreak();
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string(")");
                 }
                 KnownMacro::ThreadLocal(items) => {
                     self.scan_string(" {");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.hardbreak_if_nonempty();
                     for item in items {
                         self.outer_attrs(&item.attrs);
@@ -632,33 +630,33 @@ mod standard_library {
                         self.scan_end();
                         self.hardbreak();
                     }
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string("}");
                     semicolon = false;
                 }
                 KnownMacro::VecArray(vec) => {
                     self.scan_string("[");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     for elem in vec.iter().delimited() {
                         self.expr(&elem);
                         self.trailing_comma(elem.is_last);
                     }
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string("]");
                 }
                 KnownMacro::VecRepeat { elem, n } => {
                     self.scan_string("[");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     self.expr(elem);
                     self.scan_string(";");
                     self.space();
                     self.expr(n);
                     self.zerobreak();
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string("]");
                 }
@@ -683,13 +681,13 @@ mod standard_library {
                 Cfg::Call(ident, args) => {
                     self.ident(ident);
                     self.scan_string("(");
-                    self.scan_begin_consistent(INDENT);
+                    self.scan_begin_consistent(self.config.indent);
                     self.zerobreak();
                     for arg in args.iter().delimited() {
                         self.cfg(&arg);
                         self.trailing_comma(arg.is_last);
                     }
-                    self.offset(-INDENT);
+                    self.offset(-self.config.indent);
                     self.scan_end();
                     self.scan_string(")");
                 }
