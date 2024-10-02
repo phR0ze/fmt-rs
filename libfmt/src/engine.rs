@@ -1,13 +1,8 @@
 // Adapted from https://github.com/rust-lang/rust/blob/1.57.0/compiler/rustc_ast_pretty/src/pp.rs.
 // See "Algorithm notes" in the crate-level rustdoc.
 // https://doc.rust-lang.org/stable/nightly-rustc/rustc_ast_pretty/pp/index.html
-use crate::{
-    comments::{self, Comment},
-    model::*,
-};
-use proc_macro2::{LineColumn, Span, TokenStream, TokenTree};
+use crate::model::*;
 use std::borrow::Cow;
-use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::iter;
 use std::{cmp, fmt};
@@ -91,14 +86,6 @@ pub struct Engine {
 
     /// Print related field for indentation to avoid writing trailing whitespace
     pub(crate) pending_indentation: usize,
-
-    /// The proc-macro2 subsystem used for all of David Tolnay's excellent AST manipulation crates
-    /// were designed primarily for working with generated code and as such drop regular comments
-    /// and whitespace . This field is used by the pre-parser to store comments and whitespace ahead
-    /// of time so that they can be re-inserted into the the final output in order to preserve a
-    /// human maintained codebase. The key is the line and column of the comment and the value is the
-    /// original comment string which can be any whitespace or any of the comment types.
-    pub(crate) comments: HashMap<Position, Vec<Comment>>,
 }
 
 impl Engine {
@@ -116,7 +103,6 @@ impl Engine {
             print_stack: Vec::new(),
             indent: 0,
             pending_indentation: 0,
-            comments: HashMap::new(),
         }
     }
 
@@ -129,18 +115,6 @@ impl Engine {
             self.print_any();
         }
         self.out
-    }
-
-    /// Search the stored comments for a match for the given span location by Position
-    /// * ***span***: location in the source string to search for a comment
-    pub(crate) fn scan_comments_by_loc(&mut self, span: Span) {
-        if self.config.comments {
-            if let Some(comments) = self.comments.remove(&Position::from(span.start())) {
-                for comment in comments {
-                    self.scan_string(comment.text());
-                }
-            }
-        }
     }
 
     /// Marks the beginning of a block of code by pushing a BeginToken onto the scan buffer and
@@ -160,7 +134,7 @@ impl Engine {
         });
         self.scan_stack.push_back(right);
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// Marks the end of a block of code by pushing an End token onto the scan buffer and tracks it's
@@ -198,7 +172,7 @@ impl Engine {
             self.scan_stack.push_back(right);
         }
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// Marks a break in the code by pushing a BreakToken onto the scan buffer and tracks it's index
@@ -221,7 +195,7 @@ impl Engine {
         self.scan_stack.push_back(right);
         self.right_total += token.blank_space as isize;
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// Push a string onto the scan buffer or simply print it to out if there is no begin in progress.
@@ -245,7 +219,7 @@ impl Engine {
             self.print_if_past_max_line_width();
         }
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// Update the previous break to include the detected offset change.
@@ -264,7 +238,7 @@ impl Engine {
             Token::String(_) | Token::End => unreachable!(),
         }
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// ?
@@ -353,7 +327,7 @@ impl Engine {
             }
         }
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// Prints any token of zero or positive size. During print the control tokens that usually have
@@ -386,7 +360,7 @@ impl Engine {
             }
         }
 
-        self.debug_dump();
+        trace!("{}", self);
     }
 
     /// If the given value is a comma and the scan buffer still has more tokens and the next token

@@ -33,7 +33,7 @@ impl Engine {
         // Compute open, close delimiters and break function
         let (open, close, delimiter_break) = match mac.delimiter {
             MacroDelimiter::Paren(_) => ("(", ")", Self::zerobreak as fn(&mut Self)),
-            MacroDelimiter::Brace(_) => (" {", "}", Self::hardbreak as fn(&mut Self)),
+            MacroDelimiter::Brace(_) => (" {", "}", Self::scan_hardbreak as fn(&mut Self)),
             MacroDelimiter::Bracket(_) => ("[", "]", Self::zerobreak as fn(&mut Self)),
         };
 
@@ -123,11 +123,11 @@ impl Engine {
                     self.neverbreak();
                     if !stream.is_empty() {
                         self.scan_begin_consistent(self.config.indent);
-                        self.hardbreak();
+                        self.scan_hardbreak();
                         self.scan_begin_inconsistent(0);
                         self.macro_rules_tokens(stream, false);
                         self.scan_end();
-                        self.hardbreak();
+                        self.scan_hardbreak();
                         self.offset(-self.config.indent);
                         self.scan_end();
                     }
@@ -136,7 +136,7 @@ impl Engine {
                 }
                 (Expander, Token::Punct(';', Spacing::Alone)) => {
                     self.scan_string(";");
-                    self.hardbreak();
+                    self.scan_hardbreak();
                     state = Start;
                 }
                 _ => unimplemented!("bad macro_rules syntax"),
@@ -146,9 +146,9 @@ impl Engine {
             Start => {}
             Expander => {
                 self.scan_string(";");
-                self.hardbreak();
+                self.scan_hardbreak();
             }
-            _ => self.hardbreak(),
+            _ => self.scan_hardbreak(),
         }
         self.offset(-self.config.indent);
         self.scan_end();

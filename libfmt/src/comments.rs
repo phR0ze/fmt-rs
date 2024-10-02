@@ -1,30 +1,25 @@
 use crate::{
-    model::{CharExt, Position, Source},
+    model::{CharExt, Config, Position, Source},
     Error, Result,
 };
-use proc_macro2::{Group, LineColumn, Span, TokenStream, TokenTree};
-use std::{collections::HashMap, str::FromStr};
-use tracing::{span, trace};
+use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
+use std::str::FromStr;
+use tracing::trace;
 
 /// Encapsulate the different types of comments that can be found in the source
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Comment {
-    Empty(String),       // Empty line ending in a newline
-    Line(String),        // Single line comment noted by the `//` prefix
-    BlockLine(String),   // Block comment noted by the `/*` prefix and `*/` suffix
-    BlockStart(String),  // Block comment noted by the `/*` start
-    BlockMiddle(String), // Whatever is between the block start and end
-    BlockEnd(String),    // Block comment noted by the `*/` end
-    Inner(String),       // Inner block comment noted by the `///` prefix
-    Outer(String),       // Outer block comment noted by the `//!` prefix
-    Unknown(String),     // Non-conformant text
+    Empty,         // Empty line ending in a newline
+    Line(String),  // Single line comment noted by the `//` prefix
+    Block(String), // Block comment noted by the `/*` prefix and `*/` suffix
+    Unknown,       // Comment that should be ignored
 }
 
 impl Comment {
-    /// Check if the comment is a block start
-    pub(crate) fn is_block_start(&self) -> bool {
+    /// Check if the comment is a block comment
+    pub(crate) fn is_block(&self) -> bool {
         match self {
-            Self::BlockStart(_) => true,
+            Self::Block(_) => true,
             _ => false,
         }
     }
@@ -37,34 +32,31 @@ impl Comment {
         }
     }
 
-    /// Check if the comment is a inner doc
-    pub(crate) fn is_inner(&self) -> bool {
+    /// Check if the comment is an empty line
+    pub(crate) fn is_empty(&self) -> bool {
         match self {
-            Self::Inner(_) => true,
+            Self::Empty => true,
             _ => false,
         }
     }
 
-    /// Check if the comment is an empty line
-    pub(crate) fn is_empty_line(&self) -> bool {
+    /// Return the comment type as an attribute name
+    pub(crate) fn attr_name(&self) -> String {
         match self {
-            Self::Empty(_) => true,
-            _ => false,
+            Self::Empty => "comment_empty".to_string(),
+            Self::Line(_) => "comment_line".to_string(),
+            Self::Block(_) => "comment_block".to_string(),
+            Self::Unknown => "comment_unknown".to_string(),
         }
     }
 
     /// Get the raw text of the comment
     pub(crate) fn text(&self) -> String {
         match self {
-            Self::Empty(text) => text.clone(),
+            Self::Empty => "".to_string(),
             Self::Line(text) => text.clone(),
-            Self::BlockLine(text) => text.clone(),
-            Self::BlockStart(text) => text.clone(),
-            Self::BlockMiddle(text) => text.clone(),
-            Self::BlockEnd(text) => text.clone(),
-            Self::Inner(text) => text.clone(),
-            Self::Outer(text) => text.clone(),
-            Self::Unknown(text) => text.clone(),
+            Self::Block(text) => text.clone(),
+            Self::Unknown => "".to_string(),
         }
     }
 }
@@ -72,118 +64,110 @@ impl Comment {
 impl std::fmt::Display for Comment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Self::Empty(text) => write!(f, "Comment::Empty({})", text.escape_default()),
+            Self::Empty => write!(f, "Comment::Empty"),
             Self::Line(text) => write!(f, "Comment::Line({})", text.escape_default()),
-            Self::BlockLine(text) => write!(f, "Comment::BlockLine({})", text.escape_default()),
-            Self::BlockStart(text) => write!(f, "Comment::BlockStart({})", text.escape_default()),
-            Self::BlockMiddle(text) => write!(f, "Comment::BlockMiddle({})", text.escape_default()),
-            Self::BlockEnd(text) => write!(f, "Comment::BlockEnd({})", text.escape_default()),
-            Self::Inner(text) => write!(f, "Comment::Inner({})", text.escape_default()),
-            Self::Outer(text) => write!(f, "Comment::Outer({})", text.escape_default()),
-            Self::Unknown(text) => write!(f, "Comment::Unknown({})", text.escape_default()),
+            Self::Block(text) => write!(f, "Comment::BlockLine({})", text.escape_default()),
+            Self::Unknown => write!(f, "Comment::Unknown"),
         }
     }
 }
 
-/// Collect comments from the original source using the token stream to provide position information
-/// relative the associated tokens. Comments are being defined as any lines of text that were
-/// dropped during the conversion into tokens that is not going to be added later by the pretty
-/// printer. This consists of newlines, regular comments, and
-/// inner and outer doc comments.
+/// Inject missing comments into the token stream.
 ///
+/// ### Background
+/// proc_macro2 recognizes doc comments and stores them as attributes but does not recognize regular
+/// comments and skips them only providing a partial solution. However we can parse the resulting
+/// tokens and inject the missing comments as a made up comment attribute that will then be
+/// recognized by the pretty printer.
+///
+/// * ***config***: Configuration settings
 /// * ***source***: Original source
-/// * ***tokens***: Tokenized version of the source to process
-/// * ***collection***: Resulting collection of comments
-pub(crate) fn pre_process(
-    source: &str,
-    comments: &mut HashMap<Position, Vec<Comment>>,
-) -> Result<TokenStream> {
+/// * ***return***: Tokenized version of the source with injected comment tokens
+pub(crate) fn inject(config: &Config, source: &str) -> Result<TokenStream> {
     // Parse source into token stream
     let tokens = TokenStream::from_str(source)
         .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
-    Ok(parse_tokens(&mut Source::new(source), tokens, comments))
+    // Only inject comments if they are enabled
+    Ok(match config.no_comments() {
+        true => tokens,
+        _ => inject_tokens(&mut Source::new(source), tokens),
+    })
 }
 
-/// Recursively parses tokens to find comments and store them in the collection
+/// Recursively inject tokens as needed to include missing comments
 ///
 /// * ***source***: Source character matrix
-/// * ***tokens***: Tokenized version of the source to process
-/// * ***collection***: Resulting collection of comments
-fn parse_tokens(
-    source: &mut Source,
-    tokens: TokenStream,
-    comments: &mut HashMap<Position, Vec<Comment>>,
-) -> TokenStream {
-    // By filtering the tokens we can drop the Punct doc comments to avoid double counting
-    // during the pretty printing of the comments.
-    let mut filtered: Vec<TokenTree> = vec![];
+/// * ***return***: Tokenized version of the source with injected comment tokens
+fn inject_tokens(source: &mut Source, tokens: TokenStream) -> TokenStream {
+    let mut result: Vec<TokenTree> = vec![];
 
     let mut tokens = tokens.into_iter().peekable();
     while let Some(token) = tokens.next() {
         match &token {
             TokenTree::Ident(ident) => {
                 let span = ident.span();
-                trace!("{}", span_to_str("Ident:", &span));
-                parse_comments(source, comments, &token, &span);
-                filtered.push(token);
+                inject_comments(source, &mut result, &token, &span);
+                trace!("{}", token_to_str(&token, &span));
+                result.push(token);
             }
             TokenTree::Literal(literal) => {
                 let span = literal.span();
-                trace!("{}", span_to_str("Literal:", &span));
-                parse_comments(source, comments, &token, &span);
-                filtered.push(token);
+                inject_comments(source, &mut result, &token, &span);
+                trace!("{}", token_to_str(&token, &span));
+                result.push(token);
             }
             TokenTree::Group(group) => {
                 // Start group
                 let open = group.span_open();
-                trace!("{}", span_to_str("Group:", &open));
-                parse_comments(source, comments, &token, &open);
+                inject_comments(source, &mut result, &token, &open);
+                trace!("{}", token_to_str(&token, &open));
 
                 // Recurse
-                let tokens = parse_tokens(source, group.stream(), comments);
+                let tokens = inject_tokens(source, group.stream());
 
                 // End group after recursion
                 let close = group.span_close();
-                trace!("{}", span_to_str("Group:", &close));
-                parse_comments(source, comments, &token, &close);
+                inject_comments(source, &mut result, &token, &close);
+                trace!("{}", token_to_str(&token, &close));
 
                 let mut _group = Group::new(group.delimiter(), tokens);
                 _group.set_span(group.span());
-                filtered.push(TokenTree::Group(_group));
+                result.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
-                filtered.push(token.clone());
                 let span = punct.span();
-                trace!("{}", span_to_str("Punct:", &span));
+                inject_comments(source, &mut result, &token, &span);
+                trace!("{}", token_to_str(&token, &span));
 
-                // proc_macro2 recognizes doc comments and stores them as attributes. Punct doc
-                // attributes span the comment starting with '/'; so we can safely skip them as
-                // we will be manually parsing out the comments later.
+                // proc_macro2 recognizes doc comments and stores them as attributes so we can
+                // safely ignore them as they will be handled by the pretty printer already.
                 if punct.as_char() == '#' && source.curr_is(punct.span().start(), '/') {
+                    result.push(token.clone());
                     while tokens
                         .peek()
                         .filter(|x| x.span().start() < punct.span().end())
                         .is_some()
                     {
-                        // skip from a comment perspective but retain to ensure the token stream
-                        // is not broken.
+                        // just pass these through to the token stream and don't need to process
+                        // for possible comments as they are already being correctly handled.
                         if let Some(token) = tokens.next() {
-                            filtered.push(token);
+                            trace!("{}", token_to_str(&token, &token.span()));
+                            result.push(token);
                         }
                     }
+                } else {
+                    result.push(token.clone());
                 }
-
-                parse_comments(source, comments, &token, &span);
             }
         }
     }
 
-    TokenStream::from_iter(filtered)
+    TokenStream::from_iter(result)
 }
 
 /// Convert the span into a string for debugging purposes
-fn span_to_str(name: &str, span: &Span) -> String {
+fn token_to_str(token: &TokenTree, span: &Span) -> String {
     let start: Position = span.start().into();
     let end: Position = span.end().into();
     let mut out = String::new();
@@ -191,7 +175,7 @@ fn span_to_str(name: &str, span: &Span) -> String {
     // Create the string for the span
     out.push_str(&format!(
         "{: <8} {: <10} ({})",
-        name,
+        token.name(),
         format!("{}..{}", start, end),
         span.source_text().unwrap_or("<None>".into()),
     ));
@@ -202,14 +186,10 @@ fn span_to_str(name: &str, span: &Span) -> String {
 /// advance the offset to account for the span.
 ///
 /// * ***source***: Character matrix of source string
-/// * ***comments***: Collection of comments
+/// * ***tokens***: Token stream to inject comments into
+/// * ***token***: Current token that is being processed
 /// * ***span***: Span to process
-fn parse_comments(
-    source: &mut Source,
-    comments: &mut HashMap<Position, Vec<Comment>>,
-    token: &TokenTree,
-    span: &Span,
-) {
+fn inject_comments(source: &mut Source, tokens: &mut Vec<TokenTree>, _: &TokenTree, span: &Span) {
     let start: Position = span.start().into();
     let end: Position = span.end().into();
 
@@ -223,20 +203,30 @@ fn parse_comments(
             }
         }
 
-        // Extract comments from the string
-        let str = match (source.str(start), token.doc()) {
-            (Some(str), Some(doc)) => Some(str + &doc + "\n"),
-            (Some(str), None) => Some(str),
-            (None, Some(doc)) => Some(doc + "\n"),
-            _ => None,
-        };
-        if let Some(str) = str {
+        // Extract comments from the unaccounted for characters before this span
+        if let Some(str) = source.str(start) {
             if !str.is_empty() {
                 if let Some(_comments) = from_str(&str) {
                     for comment in &_comments {
-                        trace!("{}, {}", comment, start);
+                        let punct = '#';
+                        let msg = comment.text();
+                        let attr_name = comment.attr_name();
+                        trace!("Comment: {}[{} = \"{}\"]", punct, attr_name, msg);
+
+                        // Ignoring spans for now
+                        tokens.push(Punct::new(punct, Spacing::Alone).into());
+                        tokens.push(
+                            Group::new(
+                                Delimiter::Bracket,
+                                TokenStream::from_iter::<Vec<TokenTree>>(vec![
+                                    Ident::new(&attr_name, Span::call_site()).into(),
+                                    Punct::new('=', Spacing::Alone).into(),
+                                    Literal::string(&msg).into(),
+                                ]),
+                            )
+                            .into(),
+                        );
                     }
-                    comments.insert(start, _comments);
                 }
             }
         }
@@ -256,17 +246,21 @@ fn from_str(text: &str) -> Option<Vec<Comment>> {
 
     // Track throughout
     let mut prev_empty_line = false;
-    let mut comment_block_starts = 0;
-    let mut comment_block_ends = 0;
+    let mut comment_block = false;
 
     // Reset on each newline
-    let mut comment_block_start = false;
-    let mut comment_block_end = false;
     let mut comment_line = false;
-    let mut comment_inner = false;
-    let mut comment_outer = false;
     let mut empty = true;
     let mut prev_char = '\0';
+
+    // Reset the tracking variables
+    let reset =
+        |line: &mut String, empty: &mut bool, comment_line: &mut bool, prev_char: &mut char| {
+            line.clear();
+            *empty = true;
+            *comment_line = false;
+            *prev_char = '\0';
+        };
 
     let mut iter = text.chars().peekable();
     while let Some(mut char) = iter.next() {
@@ -291,73 +285,68 @@ fn from_str(text: &str) -> Option<Vec<Comment>> {
                 prev_empty_line = false;
             }
 
-            comments.push(
-                // Everything is included in a block comment until the end
-                if comment_block_starts > comment_block_ends {
-                    if comment_block_start {
-                        Comment::BlockStart(line)
-                    } else {
-                        Comment::BlockMiddle(line)
-                    }
-                } else {
-                    if empty {
-                        Comment::Empty("\n".to_string())
-                    } else if comment_line {
-                        Comment::Line(line)
-                    } else if comment_block_start && comment_block_end {
-                        Comment::BlockLine(line)
-                    } else if comment_block_end {
-                        Comment::BlockEnd(line)
-                    } else if comment_inner {
-                        Comment::Inner(line)
-                    } else if comment_outer {
-                        Comment::Outer(line)
-                    } else {
-                        Comment::Unknown(line)
-                    }
-                },
-            );
+            // Block comment has not be closed yet, so everything is part of it
+            if comment_block {
+                continue;
+            }
 
-            // reset
-            empty = true;
-            comment_line = false;
-            comment_block_start = false;
-            comment_block_end = false;
-            comment_inner = false;
-            comment_outer = false;
-            line = String::new();
-            prev_char = '\0';
+            // Store the comment
+            let comment = if empty {
+                line.pop(); // drop newline
+                Comment::Empty
+            } else if comment_line {
+                line.pop(); // drop newline
+                Comment::Line(line.clone())
+            } else {
+                Comment::Unknown
+            };
+
+            // Filter out unknown comments
+            if comment != Comment::Unknown {
+                comments.push(comment);
+            }
+
+            reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
             continue;
         } else if char != ' ' {
             empty = false;
             prev_empty_line = false;
 
-            // Check for public comment types
-            let mut pub_comment = false;
-            if let Some(next_char) = iter.peek() {
-                if prev_char == '/' && char == '/' && *next_char == '/' {
-                    pub_comment = true;
-                    char = iter.next().unwrap();
-                    line.push(char);
-                    comment_inner = true;
-                } else if prev_char == '/' && char == '/' && *next_char == '!' {
-                    pub_comment = true;
-                    char = iter.next().unwrap();
-                    line.push(char);
-                    comment_outer = true;
-                }
-            }
+            // Block comments encompass everything until the end
+            if comment_block {
+                if prev_char == '*' && char == '/' {
+                    comment_block = false; // Reset block checking
+                    line.truncate(line.len() - 2); // Drop control characters
 
-            // Check for other comment types
-            if !pub_comment {
-                if prev_char == '/' && char == '/' {
-                    comment_line = true;
-                } else if prev_char == '/' && char == '*' {
-                    comment_block_starts += 1;
-                    comment_block_start = true;
-                } else if prev_char == '*' && char == '/' {
-                    comment_block_ends += 1;
-                    comment_block_end = true;
+                    // Consume any trailing newline before its added to the comment
+                    if let Some(c) = iter.next_if_eq(&'\n') {
+                        char = c; // Keeps the prev_char accurate
+                    }
+
+                    comments.push(Comment::Block(line.clone()));
+                    reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
+                }
+            } else {
+                // Check for doc comments first
+                let mut doc_comment = false;
+                if let Some(next_char) = iter.peek() {
+                    if prev_char == '/' && char == '/' && (*next_char == '/' || *next_char == '!') {
+                        line.clear(); // start storing the comment
+                        doc_comment = true;
+                        char = iter.next().unwrap();
+                    }
+                }
+
+                // Fall back on regular comments
+                if !doc_comment {
+                    if prev_char == '/' && (char == '/' || char == '*') {
+                        line.clear(); // start storing the comment
+                        if char == '/' {
+                            comment_line = true;
+                        } else {
+                            comment_block = true;
+                        }
+                    }
                 }
             }
         }
@@ -366,51 +355,24 @@ fn from_str(text: &str) -> Option<Vec<Comment>> {
         prev_char = char;
     }
 
-    // Add any remaining comments that didn't have a newline
-    if !line.is_empty() {
-        if comment_line {
-            comments.push(Comment::Line(line));
-        } else if comment_block_start && comment_block_end {
-            comments.push(Comment::BlockLine(line));
-        } else if comment_block_end {
-            comments.push(Comment::BlockStart(line));
-        } else if comment_block_end {
-            comments.push(Comment::BlockEnd(line));
-        } else if comment_inner {
-            comments.push(Comment::Inner(line));
-        } else if comment_outer {
-            comments.push(Comment::Outer(line));
-
-        // Whitespace needs to have more than just spaces to be considered
-        // interesting enought to store
-        } else if !empty {
-            comments.push(Comment::Unknown(line));
-        }
-    }
-
     match comments.is_empty() {
         true => None,
         _ => Some(comments),
     }
 }
 
-/// TokenTree extension methods
-trait TokenTreeExt {
-    fn doc(&self) -> Option<String>;
+/// Extension trait for printing token types to string
+trait TokenExt {
+    fn name(&self) -> String;
 }
 
-impl TokenTreeExt for &TokenTree {
-    fn doc(&self) -> Option<String> {
+impl TokenExt for TokenTree {
+    fn name(&self) -> String {
         match self {
-            TokenTree::Punct(punct) => {
-                let str = punct.span().source_text().unwrap_or("<None>".into());
-                if punct.as_char() == '#' && str.chars().next() == Some('/') {
-                    Some(str)
-                } else {
-                    None
-                }
-            }
-            _ => None,
+            TokenTree::Ident(_) => "Ident".to_string(),
+            TokenTree::Punct(_) => "Punct".to_string(),
+            TokenTree::Literal(_) => "Literal".to_string(),
+            TokenTree::Group(_) => "Group".to_string(),
         }
     }
 }
@@ -423,6 +385,7 @@ mod tests {
     use proc_macro2::TokenStream;
     use std::str::FromStr;
     use tracing_test::traced_test;
+    // use tracing_test::traced_test;
 
     #[test]
     fn test_multi_comment_types() {
@@ -441,97 +404,138 @@ mod tests {
                 Ok(())
             }
         "#};
-        let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process(source, &mut comments);
-
-        assert_eq!(comments.len(), 3);
-
-        let comments1 = &comments[&pos(2, 0)];
-        assert_eq!(comments1.len(), 1);
-        assert_eq!(comments1[0].is_empty_line(), true);
-
-        let comments2 = &comments[&pos(9, 4)];
-        assert_eq!(comments2.len(), 2);
-        assert_eq!(comments2[0].is_empty_line(), true);
-        assert_eq!(comments2[1].is_line(), true);
         assert_eq!(
-            comments2[1].text(),
-            "    // Pass in an example\n".to_string()
+            from_str(source).unwrap(),
+            vec![
+                Comment::Empty,
+                Comment::Empty,
+                Comment::Line(" Pass in an example".to_string()),
+                Comment::Empty,
+            ]
         );
-
-        let comments3 = &comments[&pos(11, 4)];
-        assert_eq!(comments3.len(), 1);
-        assert_eq!(comments3[0].is_empty_line(), true);
     }
 
     #[traced_test]
     #[test]
-    fn test_doc_comments() {
+    fn test_skip_doc_comments() {
         let source = indoc! {r#"
 
              /// A foo struct
             struct Foo {
 
-                /// Field a
+                //     Indented comment
                 a: i32,
 
-                /// Field b
+                // Field b
                 b: i32,
             }
         "#};
-        let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process(source, &mut comments).unwrap();
+        assert_eq!(
+            from_str(source).unwrap(),
+            vec![
+                Comment::Empty,
+                Comment::Empty,
+                Comment::Line("     Indented comment".into()),
+                Comment::Empty,
+                Comment::Line(" Field b".into()),
+            ]
+        );
 
-        assert_eq!(comments.len(), 3);
+        // Check the tokens that were generated
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
 
-        // Inner comments are stored based on the actual line not the code after.
-        // This is different than other comments and mighte be something to consider later.
-        let comments1 = &comments[&pos(1, 1)];
-        assert_eq!(comments1.len(), 2);
-        assert_eq!(comments1[0].is_empty_line(), true);
-        assert_eq!(comments1[1].is_inner(), true);
-        assert_eq!(comments1[1].text(), " /// A foo struct\n".to_string());
+        // (2) punct at the top level
+        assert_eq!(
+            tokens
+                .clone()
+                .filter(|x| {
+                    if let TokenTree::Punct(punct) = x {
+                        return punct.as_char() == '#';
+                    }
+                    false
+                })
+                .count(),
+            2
+        );
 
-        let comments2 = &comments[&pos(4, 4)];
-        assert_eq!(comments2.len(), 2);
-        assert_eq!(comments2[0].is_empty_line(), true);
-        assert_eq!(comments2[1].is_inner(), true);
-        assert_eq!(comments2[1].text(), "    /// Field a\n".to_string());
-
-        let comments3 = &comments[&pos(7, 4)];
-        assert_eq!(comments3.len(), 2);
-        assert_eq!(comments3[0].is_empty_line(), true);
-        assert_eq!(comments3[1].is_inner(), true);
-        assert_eq!(comments3[1].text(), "    /// Field b\n".to_string());
+        // (2) punct inside the group
+        let token = tokens.skip(6).next().unwrap();
+        assert!(matches!(token, TokenTree::Group(_)));
+        if let TokenTree::Group(group) = token {
+            let mut stream = group.stream().into_iter();
+            assert_eq!(
+                stream
+                    .by_ref()
+                    .filter(|x| {
+                        if let TokenTree::Punct(punct) = x {
+                            return punct.as_char() == '#';
+                        }
+                        false
+                    })
+                    .count(),
+                4
+            );
+        }
     }
 
-    #[traced_test]
     #[test]
-    fn test_empty_lines() {
+    fn test_inject_tokens() {
         let source = indoc! {r#"
-
-            use
-            foo1;
-            use foo2;
-
-            use foo3;
+            // A foo struct
+            struct Foo;
         "#};
-        let mut comments: HashMap<Position, Vec<Comment>> = HashMap::new();
-        pre_process(source, &mut comments);
+        let mut tokens = inject(&Config::default(), source).unwrap().into_iter();
 
-        assert_eq!(comments.len(), 2);
+        // 1. Punct(#)
+        let token = tokens.next().unwrap();
+        assert!(matches!(token, TokenTree::Punct(_)));
+        if let TokenTree::Punct(punct) = token {
+            assert_eq!(punct.as_char(), '#');
+        }
 
-        let comments1 = &comments[&pos(1, 0)];
-        assert_eq!(comments1.len(), 1);
-        assert_eq!(comments1[0].is_empty_line(), true);
+        // 2. Group: bracket, token stream
+        let token = tokens.next().unwrap();
+        assert!(matches!(token, TokenTree::Group(_)));
+        let group = if let TokenTree::Group(group) = token {
+            assert_eq!(group.delimiter(), Delimiter::Bracket);
+            group
+        } else {
+            panic!("Expected a group token");
+        };
 
-        let comments2 = &comments[&pos(5, 0)];
-        assert_eq!(comments2.len(), 1);
-        assert_eq!(comments2[0].is_empty_line(), true);
+        // Examine the stream
+        let mut stream = group.stream().into_iter();
+        let token = stream.next().unwrap();
+
+        // 3. Ident(comment_line)
+        assert!(matches!(token, TokenTree::Ident(_)));
+        if let TokenTree::Ident(ident) = token {
+            assert_eq!(
+                format!("{:?}", ident),
+                "Ident { sym: comment_line }".to_string()
+            );
+        }
+
+        // 4. Punct(=)
+        let token = stream.next().unwrap();
+        assert!(matches!(token, TokenTree::Punct(_)));
+        if let TokenTree::Punct(punct) = token {
+            assert_eq!(punct.as_char(), '=');
+        }
+
+        // 5. Literal(=)
+        let token = stream.next().unwrap();
+        assert!(matches!(token, TokenTree::Literal(_)));
+        if let TokenTree::Literal(literal) = token {
+            assert_eq!(
+                format!("{:?}", literal),
+                "Literal { lit: \" A foo struct\" }".to_string()
+            );
+        }
     }
 
     #[test]
-    fn test_comment_block_lines() {
+    fn test_comment_line_and_block_lines() {
         let source = indoc! {r#"
             // Line 1
             /* Block line 1 */
@@ -541,10 +545,9 @@ mod tests {
         assert_eq!(
             from_str(source).unwrap(),
             vec![
-                Comment::Line("// Line 1\n".into()),
-                Comment::BlockLine("/* Block line 1 */\n".into()),
-                Comment::BlockLine("/* Block line 2 */ other\n".into()),
-                Comment::Unknown("other\n".into()),
+                Comment::Line(" Line 1".into()),
+                Comment::Block(" Block line 1 ".into()),
+                Comment::Block(" Block line 2 ".into()),
             ]
         );
     }
@@ -562,33 +565,18 @@ mod tests {
         "#};
         assert_eq!(
             from_str(source).unwrap(),
-            vec![
-                Comment::BlockStart("/****\n".into()),
-                Comment::BlockMiddle("\n".into()),
-                Comment::BlockMiddle(" // Line 1\n".into()),
-                Comment::BlockMiddle(" * Block\n".into()),
-                Comment::BlockMiddle(" // Line 2\n".into()),
-                Comment::BlockMiddle("\n".into()),
-                Comment::BlockEnd(" ***/\n".into()),
-            ]
+            vec![Comment::Block(
+                "***\n\n // Line 1\n * Block\n // Line 2\n\n **".into()
+            ),]
         );
     }
 
     #[test]
-    fn test_non_comment_lines_should_be_captured_as_well() {
+    fn test_non_comment_lines_should_not_be_captured() {
         let source = indoc! {r#"
             foo
         "#};
-        assert_eq!(
-            from_str(source).unwrap(),
-            vec![Comment::Unknown("foo\n".into()),]
-        );
-
-        // unknown comment without newline
-        assert_eq!(
-            from_str("foo").unwrap(),
-            vec![Comment::Unknown("foo".into()),]
-        );
+        assert!(from_str(source).is_none());
     }
 
     #[test]
@@ -597,38 +585,35 @@ mod tests {
 
             // Line
 
-            /// Inner
+            /// Outer
 
-            //! Outer
+            //! Inner
         "#};
         assert_eq!(
             from_str(source).unwrap(),
             vec![
-                Comment::Empty("\n".into()),
-                Comment::Line("// Line\n".into()),
-                Comment::Empty("\n".into()),
-                Comment::Inner("/// Inner\n".into()),
-                Comment::Empty("\n".into()),
-                Comment::Outer("//! Outer\n".into()),
+                Comment::Empty,
+                Comment::Line(" Line".into()),
+                Comment::Empty,
+                Comment::Empty,
             ]
         );
     }
 
     #[test]
-    fn test_mixing_comment_line_and_inner_success() {
+    fn test_mixing_comment_line_and_outer_success() {
         let source = indoc! {r#"
 
             // Line
 
-            /// Inner
+            /// Outer
         "#};
         assert_eq!(
             from_str(source).unwrap(),
             vec![
-                Comment::Empty("\n".into()),
-                Comment::Line("// Line\n".into()),
-                Comment::Empty("\n".into()),
-                Comment::Inner("/// Inner\n".into()),
+                Comment::Empty,
+                Comment::Line(" Line".into()),
+                Comment::Empty,
             ]
         );
     }
@@ -641,10 +626,7 @@ mod tests {
         "#};
         assert_eq!(
             from_str(source).unwrap(),
-            vec![
-                Comment::Empty("\n".into()),
-                Comment::Line("// Comment\n".into()),
-            ]
+            vec![Comment::Empty, Comment::Line(" Comment".into()),]
         );
     }
 
@@ -653,11 +635,28 @@ mod tests {
         let source = indoc! {r#"
 
 
+            println!("{}", "1");
         "#};
-        assert_eq!(source.trim_matches(' '), "\n\n");
+
+        // Check the string beeing fed in
+        assert_eq!(source, "\n\nprintln!(\"{}\", \"1\");\n");
+
+        // Check the resulting comments parsed out
+        assert_eq!(from_str(source).unwrap(), vec![Comment::Empty]);
+
+        // Check the tokens that were generated
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+
         assert_eq!(
-            from_str(source).unwrap(),
-            vec![Comment::Empty("\n".into()),]
+            tokens
+                .filter(|x| {
+                    if let TokenTree::Punct(punct) = x {
+                        return punct.as_char() == '#';
+                    }
+                    false
+                })
+                .count(),
+            1
         );
     }
 

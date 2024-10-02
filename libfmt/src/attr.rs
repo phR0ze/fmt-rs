@@ -4,6 +4,7 @@ use proc_macro2::{Delimiter, Group, TokenStream, TokenTree};
 use syn::{AttrStyle, Attribute, Expr, Lit, MacroDelimiter, Meta, MetaList, MetaNameValue};
 
 impl Engine {
+    /// Scan outer attributes like `#[doc = "value"]`
     pub fn outer_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             if let AttrStyle::Outer = attr.style {
@@ -12,6 +13,7 @@ impl Engine {
         }
     }
 
+    /// Scan inner attributes like `#![doc = "value"]`
     pub fn inner_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             if let AttrStyle::Inner(_) = attr.style {
@@ -20,8 +22,10 @@ impl Engine {
         }
     }
 
+    /// Scan the attribute
     fn attr(&mut self, attr: &Attribute) {
         if let Some(mut doc) = value_of_attribute("doc", attr) {
+            // Single line doc comment
             if !doc.contains('\n')
                 && match attr.style {
                     AttrStyle::Outer => !doc.starts_with('/'),
@@ -29,12 +33,14 @@ impl Engine {
                 }
             {
                 trim_trailing_spaces(&mut doc);
+
+                // Queue up the doc comment for printing with its correct styled prefix
                 self.scan_string(match attr.style {
                     AttrStyle::Outer => "///",
                     AttrStyle::Inner(_) => "//!",
                 });
                 self.scan_string(doc);
-                self.hardbreak();
+                self.scan_hardbreak(); // Add a newline after the doc comment
                 return;
             } else if can_be_block_comment(&doc)
                 && match attr.style {
@@ -49,24 +55,26 @@ impl Engine {
                 });
                 self.scan_string(doc);
                 self.scan_string("*/");
-                self.hardbreak();
+                self.scan_hardbreak();
                 return;
             }
-        } else if let Some(mut comment) = value_of_attribute("comment", attr) {
-            if !comment.contains('\n') {
-                trim_trailing_spaces(&mut comment);
-                self.scan_string("//");
-                self.scan_string(comment);
-                self.hardbreak();
-                return;
-            } else if can_be_block_comment(&comment) && !comment.starts_with(&['*', '!'][..]) {
-                trim_interior_trailing_spaces(&mut comment);
-                self.scan_string("/*");
-                self.scan_string(comment);
-                self.scan_string("*/");
-                self.hardbreak();
-                return;
-            }
+        } else if let Some(_) = value_of_attribute("comment_empty", attr) {
+            self.scan_hardbreak();
+            return;
+        } else if let Some(mut comment) = value_of_attribute("comment_line", attr) {
+            trim_trailing_spaces(&mut comment);
+            self.scan_string("//");
+            self.scan_string(comment);
+            self.scan_hardbreak();
+            return;
+        } else if let Some(mut comment) = value_of_attribute("comment_block", attr) {
+            //} else if can_be_block_comment(&comment) && !comment.starts_with(&['*', '!'][..]) {
+            trim_interior_trailing_spaces(&mut comment);
+            self.scan_string("/*");
+            self.scan_string(comment);
+            self.scan_string("*/");
+            self.scan_hardbreak();
+            return;
         }
 
         self.scan_string(match attr.style {
@@ -207,6 +215,7 @@ impl Engine {
     }
 }
 
+/// Get the value of the attribute e.g. `#[doc = "value"]`
 fn value_of_attribute(requested: &str, attr: &Attribute) -> Option<String> {
     let value = match &attr.meta {
         Meta::NameValue(meta) if meta.path.is_ident(requested) => &meta.value,

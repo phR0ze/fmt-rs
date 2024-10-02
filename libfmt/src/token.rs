@@ -31,7 +31,6 @@ impl Engine {
     }
 
     pub fn ident(&mut self, ident: &Ident) {
-        self.scan_comments_by_loc(ident.span());
         self.scan_string(ident.to_string());
     }
 
@@ -40,7 +39,6 @@ impl Engine {
     }
 
     pub fn token_literal(&mut self, literal: &Literal) {
-        self.scan_comments_by_loc(literal.span());
         self.scan_string(literal.to_string());
     }
 

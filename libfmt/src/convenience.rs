@@ -1,6 +1,5 @@
 use crate::engine::{Engine, SIZE_INFINITY};
 use crate::model::{BeginToken, Break, BreakToken};
-use proc_macro2::LineColumn;
 
 impl Engine {
     /// Scan start with inconsistent breaks and the given indent for subsequent lines
@@ -19,7 +18,7 @@ impl Engine {
         });
     }
 
-    fn spaces(&mut self, n: usize) {
+    fn scan_spaces(&mut self, n: usize) {
         self.scan_break(BreakToken {
             blank_space: n,
             ..BreakToken::default()
@@ -27,11 +26,11 @@ impl Engine {
     }
 
     pub fn zerobreak(&mut self) {
-        self.spaces(0);
+        self.scan_spaces(0);
     }
 
     pub fn space(&mut self) {
-        self.spaces(1);
+        self.scan_spaces(1);
     }
 
     /// Add a single space to the buffer
@@ -39,8 +38,9 @@ impl Engine {
         self.scan_string(" ");
     }
 
-    pub fn hardbreak(&mut self) {
-        self.spaces(SIZE_INFINITY as usize);
+    /// Add a single newline to the buffer
+    pub fn scan_hardbreak(&mut self) {
+        self.scan_spaces(SIZE_INFINITY as usize);
     }
 
     pub fn space_if_nonempty(&mut self) {

@@ -410,7 +410,7 @@ impl Engine {
             self.scan_string("{}");
         } else {
             self.scan_string("{");
-            self.hardbreak();
+            self.scan_hardbreak();
             for stmt in &expr.then_branch.stmts {
                 self.stmt(stmt);
             }
@@ -502,7 +502,7 @@ impl Engine {
         self.inner_attrs(&expr.attrs);
         for arm in &expr.arms {
             self.arm(arm);
-            self.hardbreak();
+            self.scan_hardbreak();
         }
         self.offset(-self.config.indent);
         self.scan_end();

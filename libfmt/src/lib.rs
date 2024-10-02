@@ -18,12 +18,9 @@ mod stmt;
 mod token;
 mod ty;
 
-use comments::Comment;
-use core::str::FromStr;
 pub(crate) use engine::Engine;
 use model::Config;
-use proc_macro2::{LineColumn, TokenStream};
-use std::{collections::HashMap, path::Path};
+use std::path::Path;
 use tracing::trace;
 
 // Re-export the public API
@@ -34,11 +31,11 @@ pub fn format_file<T: AsRef<Path>>(path: T) -> Result<String> {
     let path = path.as_ref();
     let source = std::fs::read_to_string(path)
         .map_err(|e| Error::new("failed to read source file").wrap_io(e))?;
-    format_str(&source, Some(Config::new().with_no_comments()))
+    format_str(None, &source)
 }
 
 /// Format the given source string
-pub fn format_str(source: &str, config: Option<Config>) -> Result<String> {
+pub fn format_str(config: Option<Config>, source: &str) -> Result<String> {
     let mut engine = Engine::new(source, config.unwrap_or_default());
     engine.format()?;
     Ok(engine.print())
@@ -49,12 +46,14 @@ impl Engine {
         trace!("Formatting");
 
         // Pre-process the token stream for comment locational information
-        let tokens = comments::pre_process(&self.src, &mut self.comments)?;
+        let tokens = comments::inject(&self.config, &self.src)?;
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
             .map_err(|e| Error::new("failed to parse token stream into syntax tree").wrap_syn(e))?;
         self.scan_begin_consistent(0);
+
+        // Check for any inner attributes for the file
         self.inner_attrs(&ast.attrs);
         for item in &ast.items {
             self.item(item);
@@ -62,11 +61,6 @@ impl Engine {
         self.scan_end();
 
         Ok(())
-    }
-
-    #[cfg(debug_assertions)]
-    pub(crate) fn debug_dump(&self) {
-        println!("{}", self);
     }
 }
 
@@ -158,50 +152,44 @@ mod tests {
     //     );
     // }
 
-    // #[test]
-    // fn test_multi_comment_types() {
-    //     let source = indoc! {r#"
-    //         use indoc::indoc;
-    //         use libfmt::Result;
-    //         use tracing::Level;
-    //         use tracing_subscriber::FmtSubscriber;
+    #[test]
+    fn test_multi_comment_types() {
+        let source = indoc! {r#"
+            use libfmt::Result;
 
-    //         fn main() -> Result<()> {
-    //             let subscriber = FmtSubscriber::builder()
-    //                 .with_max_level(Level::TRACE)
-    //                 .finish();
-    //             tracing::subscriber::set_global_default(subscriber).unwrap();
+            fn main() -> Result<()> {
+                let subscriber = FmtSubscriber::builder()
+                    .with_max_level(Level::TRACE)
+                    .finish();
+                tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    //             // Pass in an example
-    //             let path = "examples/dump.rs";
-    //             let formatted = libfmt::format_file(path)?;
-    //             print!("{}", formatted);
+                // Pass in an example
+                let path = "examples/dump.rs";
+                let formatted = libfmt::format_file(path)?;
+                print!("{}", formatted);
 
-    //             Ok(())
-    //         }
-    //     "#};
-    //     assert_eq!(
-    //         source,
-    //         indoc! {r#"
-    //             use indoc::indoc;
-    //             use libfmt::Result;
-    //             use tracing::Level;
-    //             use tracing_subscriber::FmtSubscriber;
+                Ok(())
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                use libfmt::Result;
 
-    //             fn main() -> Result<()> {
-    //                 let subscriber = FmtSubscriber::builder() .with_max_level(Level::TRACE) .finish();
-    //                 tracing::subscriber::set_global_default(subscriber).unwrap();
+                fn main() -> Result<()> {
+                    let subscriber = FmtSubscriber::builder().with_max_level(Level::TRACE).finish();
+                    tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    //                 // Pass in an example
-    //                 let path = "examples/dump.rs";
-    //                 let formatted = libfmt::format_file(path)?;
-    //                 print!("{}", formatted);
+                    // Pass in an example
+                    let path = "examples/dump.rs";
+                    let formatted = libfmt::format_file(path)?;
+                    print!("{}", formatted);
 
-    //                 Ok(())
-    //             }
-    //     "#}
-    //     );
-    // }
+                    Ok(())
+                }
+        "#}
+        );
+    }
 
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
@@ -218,7 +206,7 @@ mod tests {
             }
         "#};
         assert_eq!(
-            format_str(source, Some(Config::new().with_no_comments())).unwrap(),
+            format_str(None, source).unwrap(),
             indoc! {r#"
 
                 /// A foo struct
@@ -243,9 +231,9 @@ mod tests {
         "#};
 
         assert_eq!(
-            format_str(source, None).unwrap(),
+            format_str(None, source).unwrap(),
             indoc! {r#"
-                
+
                 println!("{}", "1");
             "#}
         );
@@ -258,7 +246,7 @@ mod tests {
         "#};
 
         assert_eq!(
-            format_str(source, None).unwrap(),
+            format_str(None, source).unwrap(),
             indoc! {r#"
                 println!("{}", "1");
             "#}

@@ -5,7 +5,7 @@ pub struct Config {
     pub(crate) invocation_brace_style_same_line: bool, // true?
 
     /// Enable or disable comments
-    pub(crate) comments: bool,
+    comments: bool,
 }
 
 impl Config {
@@ -19,6 +19,16 @@ impl Config {
             comments: false,
             ..Self::default()
         }
+    }
+
+    /// Return true if comments are enabled
+    pub fn comments(&self) -> bool {
+        self.comments
+    }
+
+    /// Return true if commments are disabled
+    pub fn no_comments(&self) -> bool {
+        self.comments == false
     }
 }
 

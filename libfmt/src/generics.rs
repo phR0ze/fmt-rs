@@ -296,17 +296,17 @@ impl Engine {
             }
         };
         if hardbreaks {
-            self.hardbreak();
+            self.scan_hardbreak();
             self.offset(-self.config.indent);
             self.scan_string("where");
-            self.hardbreak();
+            self.scan_hardbreak();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
                     self.scan_string(";");
                 } else {
                     self.scan_string(",");
-                    self.hardbreak();
+                    self.scan_hardbreak();
                 }
             }
             if !semi {

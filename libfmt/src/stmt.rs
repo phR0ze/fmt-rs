@@ -39,7 +39,7 @@ impl Engine {
                     self.scan_end();
                 }
                 self.scan_string(";");
-                self.hardbreak();
+                self.scan_hardbreak();
             }
             Stmt::Item(item) => self.item(item),
             Stmt::Expr(expr, None) => {
@@ -50,7 +50,7 @@ impl Engine {
                         self.scan_string(";");
                     }
                     self.scan_end();
-                    self.hardbreak();
+                    self.scan_hardbreak();
                 } else {
                     self.expr_beginning_of_line(expr, true);
                 }
@@ -67,13 +67,13 @@ impl Engine {
                     self.scan_string(";");
                 }
                 self.scan_end();
-                self.hardbreak();
+                self.scan_hardbreak();
             }
             Stmt::Macro(stmt) => {
                 self.outer_attrs(&stmt.attrs);
                 let semicolon = true;
                 self.mac(&stmt.mac, None, semicolon);
-                self.hardbreak();
+                self.scan_hardbreak();
             }
         }
     }

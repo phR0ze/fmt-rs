@@ -49,8 +49,13 @@ support the new syntax.
 ### doc attribute
 [Turns out](https://stackoverflow.com/questions/77971478/how-to-insert-doc-comments-using-syn) the 
 `///` and `//!` are not really comments according to the AST but rather syntactic sugar for the 
-`#[doc]` attribute. While actual comments are discarded at parse time and cannot be maniuplated by 
-`syn`.
+`#[doc]` attribute. While actual comments are discarded at parse time and cannot be manipulated by 
+`proc_macro2` the doc attributes are preserved and even pretty printed e.g. `#doc = r" Testing"]`.
+
+Outter doc attributes are attributes associated with programmatic components inside the application 
+while Inner doc attributes are those associated with the module or package. Quite counter intuitive 
+really.
+
 
 ## Contributing
 The Rust AST related crates can only be built on `Nightly`.
