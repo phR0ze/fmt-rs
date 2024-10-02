@@ -68,7 +68,6 @@ impl Engine {
             self.scan_hardbreak();
             return;
         } else if let Some(mut comment) = value_of_attribute("comment_block", attr) {
-            //} else if can_be_block_comment(&comment) && !comment.starts_with(&['*', '!'][..]) {
             trim_interior_trailing_spaces(&mut comment);
             self.scan_string("/*");
             self.scan_string(comment);

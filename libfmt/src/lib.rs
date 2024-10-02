@@ -152,6 +152,26 @@ mod tests {
     //     );
     // }
 
+    // TODO: Fix this test
+    #[test]
+    fn test_inline_block_comment() {
+        let source = indoc! {r#"
+            struct Foo {
+                one: i32, // A foo struct
+                two: i32,
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo {
+                    one: i32, // A foo struct
+                    two: i32,
+                }
+            "#},
+        );
+    }
+
     #[test]
     fn test_multi_comment_types() {
         let source = indoc! {r#"
@@ -188,6 +208,29 @@ mod tests {
                     Ok(())
                 }
         "#}
+        );
+    }
+
+    #[test]
+    fn test_block_comment() {
+        let source = indoc! {r#"
+            /**************************
+             * ///  A foo struct  \\\ *
+             *  - one                 *
+             *  - two                 *
+             *************************/
+            struct Foo;
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                /**************************
+                 * ///  A foo struct  \\\ *
+                 *  - one                 *
+                 *  - two                 *
+                 *************************/
+                struct Foo;
+            "#},
         );
     }
 

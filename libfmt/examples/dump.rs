@@ -1,10 +1,10 @@
 use libfmt::Result;
-use tracing::{level_filters::LevelFilter, Level};
+use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
 fn main() -> Result<()> {
     let subscriber = FmtSubscriber::builder()
-        .with_max_level(LevelFilter::OFF)
+        .with_max_level(Level::DEBUG)
         .finish();
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
