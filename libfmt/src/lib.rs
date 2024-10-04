@@ -152,7 +152,7 @@ mod tests {
     //     );
     // }
 
-    // TODO: Fix this test
+    // TODO: Fix support for trailing comments
     #[test]
     fn test_inline_block_comment() {
         let source = indoc! {r#"

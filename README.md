@@ -56,7 +56,6 @@ Outter doc attributes are attributes associated with programmatic components ins
 while Inner doc attributes are those associated with the module or package. Quite counter intuitive 
 really.
 
-
 ## Contributing
 The Rust AST related crates can only be built on `Nightly`.
 

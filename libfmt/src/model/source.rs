@@ -56,7 +56,7 @@ impl Source {
     }
 
     /// Check if the character at the given position is the given character
-    pub(crate) fn curr_is<C: Into<char>, P: Into<Position>>(&self, pos: P, c: C) -> bool {
+    pub(crate) fn char_at_is<C: Into<char>, P: Into<Position>>(&self, pos: P, c: C) -> bool {
         self.get(pos).filter(|x| **x == c.into()).is_some()
     }
 
@@ -179,10 +179,10 @@ mod tests {
     #[test]
     fn test_char_is() {
         let source = Source::new("Hello\nFoo\n");
-        assert_eq!(source.curr_is((0, 0), 'H'), true);
-        assert_eq!(source.curr_is((0, 4), 'o'), true);
-        assert_eq!(source.curr_is((1, 0), 'F'), true);
-        assert_eq!(source.curr_is((1, 3), '\n'), true);
+        assert_eq!(source.char_at_is((0, 0), 'H'), true);
+        assert_eq!(source.char_at_is((0, 4), 'o'), true);
+        assert_eq!(source.char_at_is((1, 0), 'F'), true);
+        assert_eq!(source.char_at_is((1, 3), '\n'), true);
     }
 
     #[test]

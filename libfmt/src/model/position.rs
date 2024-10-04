@@ -18,6 +18,19 @@ impl Position {
     pub(crate) fn new(line: usize, column: usize) -> Self {
         Self { line, column }
     }
+
+    /// Get the maximum position
+    pub(crate) fn max() -> Self {
+        Self {
+            line: usize::MAX,
+            column: usize::MAX,
+        }
+    }
+
+    /// Check if the position is the maximum position
+    pub(crate) fn is_max(&self) -> bool {
+        self.line == usize::MAX && self.column == usize::MAX
+    }
 }
 
 /// Default Position
