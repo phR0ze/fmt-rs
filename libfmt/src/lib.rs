@@ -68,6 +68,7 @@ impl Engine {
 mod tests {
     use super::*;
     use indoc::indoc;
+    use tracing_test::traced_test;
 
     // // // Rustfmt will align the parameters vertically
     // // // libfmt will align the parameters horizontally and wrap intelligently
@@ -234,6 +235,7 @@ mod tests {
         );
     }
 
+    #[traced_test]
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"

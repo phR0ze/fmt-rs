@@ -63,6 +63,10 @@ fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: bool) -> Vec<To
                 prev = true;
             }
             TokenTree::Group(group) => {
+                // Need to account for the group's opening control character
+                let span = group.span_open();
+                inject_comments(source, &mut result, Some(&span), true);
+
                 // Recurse on group
                 trace!("{}", token_to_str(&token, &group.span_open()));
                 let mut group_tokens = inject_tokens(source, group.stream(), true);
@@ -354,7 +358,6 @@ mod tests {
     use indoc::indoc;
     use proc_macro2::TokenStream;
     use std::str::FromStr;
-    use tracing_test::traced_test;
 
     enum TokenKind {
         Ident,
@@ -558,6 +561,47 @@ mod tests {
     }
 
     #[test]
+    fn test_skip_doc_comments() {
+        let source = indoc! {r#"
+
+             /// A foo struct
+            struct Foo {
+
+                //     Indented comment
+                a: i32,
+
+                // Field b
+                b: i32,
+            }
+        "#};
+
+        // Check the tokens that were generated
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+
+        // Check total comments
+        assert_eq!(tokens.comment_count(), 5);
+
+        // Check first after the use statement
+        assert_eq!(tokens.comments_before((1, 1)), vec![Comment::Empty]);
+
+        // Get the group at postiion which you can see with tracing output
+        let group = tokens.get((2, 11)).as_group();
+        let tokens = group.stream().into_iter();
+
+        assert_eq!(
+            tokens.comments_before((5, 4)),
+            vec![
+                Comment::Empty,
+                Comment::Line("     Indented comment".into())
+            ]
+        );
+        assert_eq!(
+            tokens.comments_after((5, 10)),
+            vec![Comment::Empty, Comment::Line(" Field b".into())]
+        );
+    }
+
+    #[test]
     fn test_comment_blocks_include_anything_until_end() {
         let source = indoc! {r#"
             /****
@@ -675,44 +719,6 @@ mod tests {
 
         // Check the last before the Ok call
         assert_eq!(tokens.comments_after((9, 33)), vec![Comment::Empty]);
-    }
-
-    #[test]
-    fn test_skip_doc_comments() {
-        let source = indoc! {r#"
-
-             /// A foo struct
-            struct Foo {
-
-                //     Indented comment
-                a: i32,
-
-                // Field b
-                b: i32,
-            }
-        "#};
-
-        // Check the tokens that were generated
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-
-        // Check total comments
-        assert_eq!(tokens.comment_count(), 4);
-
-        // Check first after the use statement
-        assert_eq!(tokens.comments_before((1, 1)), vec![Comment::Empty]);
-
-        // Get the group at postiion which you can see with tracing output
-        let group = tokens.get((2, 11)).as_group();
-        let tokens = group.stream().into_iter();
-
-        assert_eq!(
-            tokens.comments_before((5, 4)),
-            vec![Comment::LineTrailing("     Indented comment".into())]
-        );
-        assert_eq!(
-            tokens.comments_after((5, 10)),
-            vec![Comment::Empty, Comment::Line(" Field b".into())]
-        );
     }
 
     #[test]
