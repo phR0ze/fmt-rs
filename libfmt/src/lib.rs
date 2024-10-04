@@ -23,6 +23,9 @@ use model::Config;
 use std::path::Path;
 use tracing::trace;
 
+/// Dummy value to use when syn requires a source token
+pub(crate) const DUMMY: &str = "libfmt_dummy";
+
 // Re-export the public API
 pub use error::{Error, Result};
 
@@ -153,22 +156,32 @@ mod tests {
     //     );
     // }
 
-    // TODO: Fix support for trailing comments
     #[test]
-    fn test_inline_block_comment() {
+    fn test_comment_inline_field() {
         let source = indoc! {r#"
             struct Foo {
-                one: i32, // A foo struct
-                two: i32,
+                a: i32, // A field
             }
         "#};
         assert_eq!(
             format_str(None, source).unwrap(),
             indoc! {r#"
                 struct Foo {
-                    one: i32, // A foo struct
-                    two: i32,
+                    a: i32, // A field
                 }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_line_no_trailing_source() {
+        let source = indoc! {r#"
+            // foo
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                // foo
             "#},
         );
     }
@@ -235,7 +248,6 @@ mod tests {
         );
     }
 
-    #[traced_test]
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"

@@ -61,6 +61,12 @@ impl Engine {
         } else if let Some(_) = value_of_attribute("comment_empty", attr) {
             self.scan_hardbreak();
             return;
+        } else if let Some(mut comment) = value_of_attribute("comment_line_trailing", attr) {
+            trim_trailing_spaces(&mut comment);
+            self.scan_string("//");
+            self.scan_string(comment);
+            self.scan_hardbreak();
+            return;
         } else if let Some(mut comment) = value_of_attribute("comment_line", attr) {
             trim_trailing_spaces(&mut comment);
             self.scan_string("//");

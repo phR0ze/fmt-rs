@@ -1,6 +1,6 @@
-use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
+use crate::{engine::Engine, DUMMY};
 use proc_macro2::TokenStream;
 use syn::{
     Fields, FnArg, ForeignItem, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
@@ -212,7 +212,14 @@ impl Engine {
     }
 
     fn item_struct(&mut self, item: &ItemStruct) {
+        // Print out any outer attributes including comments
         self.outer_attrs(&item.attrs);
+
+        // Don't print DUMMY value that was used to trick syn for comments
+        if item.ident == DUMMY {
+            return;
+        }
+
         self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("struct ");
@@ -224,6 +231,14 @@ impl Engine {
                 self.scan_string("{");
                 self.hardbreak_if_nonempty();
                 for field in &fields.named {
+                    // Don't print DUMMY fields used for trailing comments
+                    if let Some(ident) = field.ident.as_ref() {
+                        if ident == DUMMY {
+                            self.outer_attrs(&field.attrs);
+                            continue;
+                        }
+                    }
+
                     self.field(field);
                     self.scan_string(",");
                     self.scan_hardbreak();

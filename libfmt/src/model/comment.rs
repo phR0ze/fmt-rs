@@ -33,6 +33,14 @@ impl Comment {
             Self::BlockInline(text) => text.clone(),
         }
     }
+
+    /// Check if the comment is trailing code
+    pub(crate) fn is_trailing(&self) -> bool {
+        match self {
+            Self::LineTrailing(_) => true,
+            _ => false,
+        }
+    }
 }
 
 impl FromStr for Comment {
