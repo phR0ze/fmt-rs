@@ -29,7 +29,7 @@ impl Engine {
         self.scan_spaces(0);
     }
 
-    pub fn space(&mut self) {
+    pub fn scan_space(&mut self) {
         self.scan_spaces(1);
     }
 
@@ -67,7 +67,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.space();
+            self.scan_space();
         }
     }
 
@@ -80,7 +80,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.space();
+            self.scan_space();
         }
     }
 

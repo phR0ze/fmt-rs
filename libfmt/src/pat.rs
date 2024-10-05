@@ -66,7 +66,7 @@ impl Engine {
         }
         for case in pat.cases.iter().delimited() {
             if !case.is_first {
-                self.space();
+                self.scan_space();
                 self.scan_string("| ");
             }
             self.pat(&case);
@@ -117,7 +117,7 @@ impl Engine {
         }
         if let Some(rest) = &pat.rest {
             self.pat_rest(rest);
-            self.space();
+            self.scan_space();
         }
         self.offset(-self.config.indent);
         self.scan_end();

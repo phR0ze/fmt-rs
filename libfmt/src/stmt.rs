@@ -14,7 +14,7 @@ impl Engine {
                     self.neverbreak();
                     self.expr(&local_init.expr);
                     if let Some((_else, diverge)) = &local_init.diverge {
-                        self.space();
+                        self.scan_space();
                         self.scan_string("else ");
                         self.scan_end();
                         self.neverbreak();
@@ -24,11 +24,11 @@ impl Engine {
                             self.scan_end();
                         } else {
                             self.scan_string("{");
-                            self.space();
+                            self.scan_space();
                             self.scan_begin_inconsistent(self.config.indent);
                             self.expr(diverge);
                             self.scan_end();
-                            self.space();
+                            self.scan_space();
                             self.offset(-self.config.indent);
                             self.scan_string("}");
                         }

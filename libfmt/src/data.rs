@@ -12,9 +12,9 @@ impl Engine {
                 self.nbsp();
                 self.scan_string("{");
                 self.scan_begin_consistent(self.config.indent);
-                self.space();
+                self.scan_space();
                 for field in fields.named.iter().delimited() {
-                    self.field(&field);
+                    self.scan_field(&field);
                     self.trailing_comma_or_space(field.is_last);
                 }
                 self.offset(-self.config.indent);
@@ -38,14 +38,15 @@ impl Engine {
         self.scan_string("(");
         self.zerobreak();
         for field in fields.unnamed.iter().delimited() {
-            self.field(&field);
+            self.scan_field(&field);
             self.trailing_comma(field.is_last);
         }
         self.offset(-self.config.indent);
         self.scan_string(")");
     }
 
-    pub fn field(&mut self, field: &Field) {
+    /// Scan a field
+    pub fn scan_field(&mut self, field: &Field) {
         self.outer_attrs(&field.attrs);
         self.visibility(&field.vis);
         if let Some(ident) = &field.ident {

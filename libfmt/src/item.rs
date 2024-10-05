@@ -1,3 +1,4 @@
+use crate::attrs;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
 use crate::{engine::Engine, DUMMY};
@@ -143,7 +144,7 @@ impl Engine {
                 self.scan_string("!");
             }
             self.path(path, PathKind::Type);
-            self.space();
+            self.scan_space();
             self.scan_string("for ");
         }
         self.ty(&item.self_ty);
@@ -212,7 +213,7 @@ impl Engine {
     }
 
     fn item_struct(&mut self, item: &ItemStruct) {
-        // Print out any outer attributes including comments
+        // Print out any outer attributes e.g. comments
         self.outer_attrs(&item.attrs);
 
         // Don't print DUMMY value that was used to trick syn for comments
@@ -230,18 +231,29 @@ impl Engine {
                 self.where_clause_for_body(&item.generics.where_clause);
                 self.scan_string("{");
                 self.hardbreak_if_nonempty();
-                for field in &fields.named {
+
+                // Look ahead to print trailing comments
+                let mut iter = fields.named.iter().peekable();
+                while let Some(field) = iter.next() {
                     // Don't print DUMMY fields used for trailing comments
                     if let Some(ident) = field.ident.as_ref() {
                         if ident == DUMMY {
-                            self.outer_attrs(&field.attrs);
                             continue;
                         }
                     }
 
-                    self.field(field);
+                    // Scan the field portion
+                    self.scan_field(field);
                     self.scan_string(",");
-                    self.scan_hardbreak();
+
+                    // Scan any trailing comment from the next field's outer attributes
+                    let trailing = match iter.peek() {
+                        Some(next) => self.scan_trailing_comment(&next.attrs),
+                        None => false,
+                    };
+                    if !trailing {
+                        self.scan_hardbreak();
+                    }
                 }
                 self.offset(-self.config.indent);
                 self.scan_end();
@@ -305,7 +317,7 @@ impl Engine {
         self.neverbreak();
         for bound in item.bounds.iter().delimited() {
             if !bound.is_first {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);
@@ -344,7 +356,7 @@ impl Engine {
         self.scan_string("{");
         self.hardbreak_if_nonempty();
         for field in &item.fields.named {
-            self.field(field);
+            self.scan_field(field);
             self.scan_string(",");
             self.scan_hardbreak();
         }
@@ -780,7 +792,7 @@ impl Engine {
                     if let UseTree::Group(_) = use_tree {
                         self.scan_hardbreak();
                     } else {
-                        self.space();
+                        self.scan_space();
                     }
                 }
             }
@@ -996,7 +1008,7 @@ impl Engine {
             if bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);

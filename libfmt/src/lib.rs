@@ -1,4 +1,4 @@
-mod attr;
+pub(crate) mod attrs;
 pub(crate) mod comments;
 mod convenience;
 mod data;
@@ -248,6 +248,7 @@ mod tests {
         );
     }
 
+    #[traced_test]
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"

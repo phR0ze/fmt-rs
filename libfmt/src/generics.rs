@@ -87,13 +87,13 @@ impl Engine {
             if type_param_bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
         }
         if let Some(default) = &type_param.default {
-            self.space();
+            self.scan_space();
             self.scan_string("= ");
             self.ty(default);
         }
@@ -313,10 +313,10 @@ impl Engine {
                 self.offset(-self.config.indent);
             }
         } else {
-            self.space();
+            self.scan_space();
             self.offset(-self.config.indent);
             self.scan_string("where");
-            self.space();
+            self.scan_space();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
@@ -355,7 +355,7 @@ impl Engine {
             if type_param_bound.is_first {
                 self.nbsp();
             } else {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
@@ -371,7 +371,7 @@ impl Engine {
             if lifetime.is_first {
                 self.nbsp();
             } else {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.lifetime(&lifetime);

@@ -9,3 +9,5 @@
       line.truncate(line.len() - 2); // Drop control characters
       iter.next_if_eq(&'\n');        // Consume any trailing newline before its read
       ```
+
+## Completed

@@ -5,21 +5,41 @@ use syn::{AttrStyle, Attribute, Expr, Lit, MacroDelimiter, Meta, MetaList, MetaN
 
 impl Engine {
     /// Scan outer attributes like `#[doc = "value"]`
-    pub fn outer_attrs(&mut self, attrs: &[Attribute]) {
+    pub(crate) fn outer_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             if let AttrStyle::Outer = attr.style {
+                // Skip trailing comments as they are attached to the previous item
+                // and as such have been handled already.
+                if is_trailing_comment(attr) {
+                    continue;
+                }
                 self.attr(attr);
             }
         }
     }
 
     /// Scan inner attributes like `#![doc = "value"]`
-    pub fn inner_attrs(&mut self, attrs: &[Attribute]) {
+    pub(crate) fn inner_attrs(&mut self, attrs: &[Attribute]) {
         for attr in attrs {
             if let AttrStyle::Inner(_) = attr.style {
                 self.attr(attr);
             }
         }
+    }
+
+    /// Iterate over the attributes and scan the first trailing comment
+    pub(crate) fn scan_trailing_comment(&mut self, attrs: &[Attribute]) -> bool {
+        for attr in attrs {
+            if let Some(mut comment) = value_of_attribute("comment_line_trailing", attr) {
+                self.nbsp();
+                trim_trailing_spaces(&mut comment);
+                self.scan_string("//");
+                self.scan_string(comment);
+                self.scan_hardbreak();
+                return true;
+            }
+        }
+        false
     }
 
     /// Scan the attribute
@@ -61,12 +81,6 @@ impl Engine {
         } else if let Some(_) = value_of_attribute("comment_empty", attr) {
             self.scan_hardbreak();
             return;
-        } else if let Some(mut comment) = value_of_attribute("comment_line_trailing", attr) {
-            trim_trailing_spaces(&mut comment);
-            self.scan_string("//");
-            self.scan_string(comment);
-            self.scan_hardbreak();
-            return;
         } else if let Some(mut comment) = value_of_attribute("comment_line", attr) {
             trim_trailing_spaces(&mut comment);
             self.scan_string("//");
@@ -89,7 +103,7 @@ impl Engine {
         self.scan_string("[");
         self.meta(&attr.meta);
         self.scan_string("]");
-        self.space();
+        self.scan_space();
     }
 
     fn meta(&mut self, meta: &Meta) {
@@ -187,7 +201,7 @@ impl Engine {
                         Delimiter::None => {}
                     }
                     stack.push((stream.into_iter().peekable(), delimiter));
-                    space = Self::space;
+                    space = Self::scan_space;
                 }
                 None => {
                     match delimiter {
@@ -218,6 +232,11 @@ impl Engine {
             }
         }
     }
+}
+
+/// Detect if the given attribute is a trailing comment
+fn is_trailing_comment(attr: &Attribute) -> bool {
+    value_of_attribute("comment_line_trailing", attr).is_some()
 }
 
 /// Get the value of the attribute e.g. `#[doc = "value"]`

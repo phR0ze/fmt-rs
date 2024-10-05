@@ -1,4 +1,4 @@
-use crate::attr;
+use crate::attrs;
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::model::BreakToken;
@@ -105,7 +105,7 @@ impl Engine {
             self.scan_string(")");
         }
         if needs_newline_if_wrap(expr) {
-            self.space();
+            self.scan_space();
         } else {
             self.nbsp();
         }
@@ -166,7 +166,7 @@ impl Engine {
         self.scan_begin_inconsistent(-self.config.indent);
         self.expr(&expr.left);
         self.scan_end();
-        self.space();
+        self.scan_space();
         self.binary_operator(&expr.op);
         self.nbsp();
         self.expr(&expr.right);
@@ -218,7 +218,7 @@ impl Engine {
         self.scan_begin_inconsistent(-self.config.indent);
         self.expr(&expr.expr);
         self.scan_end();
-        self.space();
+        self.scan_space();
         self.scan_string("as ");
         self.ty(&expr.ty);
         self.scan_end();
@@ -251,19 +251,19 @@ impl Engine {
             self.pat(&pat);
             if !pat.is_last {
                 self.scan_string(",");
-                self.space();
+                self.scan_space();
             }
         }
         match &expr.output {
             ReturnType::Default => {
                 self.scan_string("|");
-                self.space();
+                self.scan_space();
                 self.offset(-self.config.indent);
                 self.scan_end();
                 self.neverbreak();
                 let wrap_in_brace = match &*expr.body {
                     Expr::Match(ExprMatch { attrs, .. }) | Expr::Call(ExprCall { attrs, .. }) => {
-                        attr::has_outer(attrs)
+                        attrs::has_outer(attrs)
                     }
                     body => !is_blocklike(body),
                 };
@@ -395,11 +395,11 @@ impl Engine {
                     // clause, wrap in a block.
                     other => {
                         self.scan_string("{");
-                        self.space();
+                        self.scan_space();
                         self.scan_begin_inconsistent(self.config.indent);
                         self.expr(other);
                         self.scan_end();
-                        self.space();
+                        self.scan_space();
                         self.offset(-self.config.indent);
                         self.scan_string("}");
                     }
@@ -610,7 +610,7 @@ impl Engine {
         if let Some(rest) = &expr.rest {
             self.scan_string("..");
             self.expr(rest);
-            self.space();
+            self.scan_space();
         }
         self.offset(-self.config.indent);
         self.end_with_max_width(34);
@@ -936,15 +936,15 @@ impl Engine {
 
     pub fn small_block(&mut self, block: &Block, attrs: &[Attribute]) {
         self.scan_string("{");
-        if attr::has_inner(attrs) || !block.stmts.is_empty() {
-            self.space();
+        if attrs::has_inner(attrs) || !block.stmts.is_empty() {
+            self.scan_space();
             self.inner_attrs(attrs);
             match block.stmts.as_slice() {
                 [Stmt::Expr(expr, None)] if stmt::break_after(expr) => {
                     self.scan_begin_inconsistent(0);
                     self.expr_beginning_of_line(expr, true);
                     self.scan_end();
-                    self.space();
+                    self.scan_space();
                 }
                 _ => {
                     for stmt in &block.stmts {
@@ -1208,7 +1208,7 @@ fn is_blocklike(expr: &Expr) -> bool {
         | Expr::Struct(ExprStruct { attrs, .. })
         | Expr::TryBlock(ExprTryBlock { attrs, .. })
         | Expr::Tuple(ExprTuple { attrs, .. })
-        | Expr::Unsafe(ExprUnsafe { attrs, .. }) => !attr::has_outer(attrs),
+        | Expr::Unsafe(ExprUnsafe { attrs, .. }) => !attrs::has_outer(attrs),
 
         Expr::Assign(_)
         | Expr::Await(_)

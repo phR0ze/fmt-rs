@@ -149,7 +149,7 @@ impl Engine {
             if bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.space();
+                self.scan_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);

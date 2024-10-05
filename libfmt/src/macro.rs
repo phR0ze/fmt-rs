@@ -217,7 +217,7 @@ impl Engine {
 
             if !previous_is_joint {
                 if needs_space {
-                    self.space();
+                    self.scan_space();
                 } else if let Token::Punct('.', _) = token {
                     self.zerobreak();
                 }
