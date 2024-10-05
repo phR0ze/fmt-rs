@@ -6,6 +6,24 @@ use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenS
 use std::str::FromStr;
 use tracing::trace;
 
+#[derive(Clone, Debug, PartialEq)]
+enum Context {
+    Struct,
+    Enum,
+    None,
+}
+
+impl Context {
+    /// Convert the string into an item type
+    fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "struct" => Context::Struct,
+            "enum" => Context::Enum,
+            _ => Context::None,
+        }
+    }
+}
+
 /// Inject missing comments into the token stream.
 ///
 /// ### Background
@@ -41,10 +59,11 @@ fn inject_tokens(
     prev: Option<TokenTree>,
 ) -> Vec<TokenTree> {
     let mut result: Vec<TokenTree> = vec![];
+    let mut ctx = Context::None;
 
     // If we have no tokens at all we might still have comments
     if tokens.is_empty() && prev.is_none() {
-        inject_comments(source, &mut result, None, None, None);
+        inject_comments(source, &mut result, &ctx, None, None, None);
         return result;
     }
 
@@ -56,40 +75,39 @@ fn inject_tokens(
         match &token {
             TokenTree::Ident(ident) => {
                 let span = ident.span();
-                inject_comments(source, &mut result, Some(&span), next, prev.as_ref());
+                inject_comments(source, &mut result, &ctx, Some(&span), next, prev.as_ref());
                 trace!("{}", token_to_str(&token, &span));
                 result.push(token);
             }
             TokenTree::Literal(literal) => {
                 let span = literal.span();
-                inject_comments(source, &mut result, Some(&span), next, prev.as_ref());
+                inject_comments(source, &mut result, &ctx, Some(&span), next, prev.as_ref());
                 trace!("{}", token_to_str(&token, &span));
                 result.push(token);
             }
             TokenTree::Group(group) => {
                 // Need to account for the group's opening control character
                 let span = group.span_open();
-                inject_comments(source, &mut result, Some(&span), next, prev.as_ref());
+                inject_comments(source, &mut result, &ctx, Some(&span), next, prev.as_ref());
 
                 // Recurse on group and update previous token to the last one in the group
                 trace!("{}", token_to_str(&token, &group.span_open()));
-                let mut group_tokens = inject_tokens(source, group.stream(), prev.clone());
-                prev = group_tokens.last().as_deref().cloned();
+                let mut _tokens = inject_tokens(source, group.stream(), prev.clone());
+                prev = _tokens.last().as_deref().cloned();
 
                 // Inject any comments at the end of the group that were not captured
                 let span = group.span_close();
-                inject_comments(source, &mut group_tokens, Some(&span), next, prev.as_ref());
+                inject_comments(source, &mut _tokens, &ctx, Some(&span), next, prev.as_ref());
                 trace!("{}", token_to_str(&token, &group.span_close()));
 
                 // Construct new group to capture group token stream changes
-                let mut _group =
-                    Group::new(group.delimiter(), TokenStream::from_iter(group_tokens));
+                let mut _group = Group::new(group.delimiter(), TokenStream::from_iter(_tokens));
                 _group.set_span(group.span());
                 result.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
                 let span = punct.span();
-                inject_comments(source, &mut result, Some(&span), next, prev.as_ref());
+                inject_comments(source, &mut result, &ctx, Some(&span), next, prev.as_ref());
                 trace!("{}", token_to_str(&token, &span));
 
                 // proc_macro2 recognizes doc comments and stores them as attributes so we can
@@ -122,12 +140,14 @@ fn inject_tokens(
 ///
 /// * ***source***: Character matrix of source string
 /// * ***tokens***: Token stream to inject comments into
+/// * ***context***: Token context were in
 /// * ***curr_span***: Current span to process or None if there are no tokens
 /// * ***next_token***: Next token to take into account for comment injection
 /// * ***prev_token***: Previous token to take into account for comment injection
 fn inject_comments(
     source: &mut Source,
     tokens: &mut Vec<TokenTree>,
+    context: &Context,
     curr_span: Option<&Span>,
     next_token: Option<&TokenTree>,
     prev_token: Option<&TokenTree>,
@@ -156,7 +176,7 @@ fn inject_comments(
                     // If there is no source token after this we need to inject a placeholder token
                     // or else the syn package will barf. Closing group tokens are not considered code
                     // and would still require a dummy token.
-                    if next_token.is_none() || next_token.unwrap().is_group_close(&start) {
+                    if next_token.is_none() {
                         if let Some(prev) = prev_token {
                             // Comments trailing fields or code blocks
                             // e.g. `a: i32, // Field a` or `println!("\n"); // Block comment`
@@ -233,6 +253,19 @@ fn inject_comment(tokens: &mut Vec<TokenTree>, comment: &Comment) {
         )
         .into(),
     );
+}
+
+/// Inject a dummy varient tokens to ensure that the token stream is valid for syn
+///
+/// * ***tokens***: Token stream to inject the dummy into
+fn inject_dummy_variant(tokens: &mut Vec<TokenTree>) {
+    let token = TokenTree::from(Ident::new(crate::DUMMY, Span::call_site()));
+    trace!("{}", token_to_str(&token, &token.span()));
+    tokens.push(token);
+
+    let token = TokenTree::from(Punct::new(',', Spacing::Alone));
+    trace!("{}", token_to_str(&token, &token.span()));
+    tokens.push(token);
 }
 
 /// Inject a dummy field tokens to ensure that the token stream is valid for syn
@@ -631,8 +664,42 @@ mod tests {
         }
     }
 
+    #[traced_test]
     #[test]
-    fn test_trailing_single_field() {
+    fn test_trailing_variant() {
+        let source = indoc! {r#"
+            enum Foo {
+                A, // A field
+            }
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert_eq!(tokens.comment_count(), 1);
+        assert_eq!(tokens.recursive_count(), 10);
+        // let group = tokens.get((0, 11)).as_group();
+        // let tokens = group.stream().into_iter();
+        // assert_eq!(
+        //     tokens.comments_after((1, 10)),
+        //     vec![Comment::LineTrailing(" A field".into())]
+        // );
+    }
+
+    #[test]
+    fn test_trailing_regular() {
+        let source = indoc! {r#"
+            struct Foo; // A struct
+            println!("Hello");
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert_eq!(tokens.comment_count(), 1);
+        assert_eq!(tokens.recursive_count(), 11);
+        assert_eq!(
+            tokens.comments_after((0, 10)),
+            vec![Comment::LineTrailing(" A struct".into())]
+        );
+    }
+
+    #[test]
+    fn test_trailing_field() {
         let source = indoc! {r#"
             struct Foo {
                 a: i32, // A field

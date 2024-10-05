@@ -157,6 +157,40 @@ mod tests {
     // }
 
     #[test]
+    fn test_comment_inline_enum() {
+        let source = indoc! {r#"
+            enum Foo {
+                Bar1, // A field
+                Bar2, // A field
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                enum Foo {
+                    Bar1, // A field
+                    Bar2, // A field
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_inline_regular() {
+        let source = indoc! {r#"
+            struct Foo; // A struct
+            println!("Hello");
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo; // A struct
+                println!("Hello");
+            "#},
+        );
+    }
+
+    #[test]
     fn test_comment_inline_field() {
         let source = indoc! {r#"
             struct Foo {
