@@ -107,14 +107,14 @@ impl fmt::Display for RingBuffer<BufEntry> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::Token;
+    use crate::model::Scan;
     use std::borrow::Cow;
 
     #[test]
     fn test_ring_buffer_debug() {
         let mut buf: RingBuffer<BufEntry> = RingBuffer::new();
         buf.push(BufEntry {
-            token: Token::String(Cow::Borrowed("hello")),
+            token: Scan::String(Cow::Borrowed("hello")),
             size: 5,
         });
         assert_eq!(

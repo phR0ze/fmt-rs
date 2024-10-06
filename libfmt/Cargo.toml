@@ -35,6 +35,7 @@ syn = { version = "2.0.76", default-features = false, features = [
 tracing = "0.1"
 
 [dev-dependencies]
+itertools = "0.13"
 indoc = "2"
 tracing-subscriber = "0.3"
 tracing-test = "0.2"

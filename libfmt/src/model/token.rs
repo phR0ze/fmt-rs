@@ -1,48 +1,56 @@
-use std::borrow::Cow;
+use super::Position;
+use proc_macro2::{Span, TokenTree};
 
-use super::{BeginToken, BreakToken};
-
-/// Buffer Entry is a token and its size.
-#[derive(Debug, Clone)]
-pub(crate) struct BufEntry {
-    pub(crate) token: Token,
-    pub(crate) size: isize,
+/// Extension trait for proc_macro2::TokenTree
+pub(crate) trait TokenExt {
+    fn to_str(&self, span: &Span) -> String;
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum Token {
-    /// Actual values are stored as strings.
-    String(Cow<'static, str>),
+impl TokenExt for TokenTree {
+    /// Convert the token and span into a string for debugging purposes.  The span is passed in
+    /// becasue we don't know in the group case if we are dealing with the open or close span from
+    /// this context.
+    ///
+    /// * ***span*** - The span of the token to
+    fn to_str(&self, span: &Span) -> String {
+        let start: Position = span.start().into();
+        let end: Position = span.end().into();
+        let mut out = String::from(format!("{: <12}", format!("{}..{}", start, end)));
 
-    /// Break tokens are pushed onto the ring-buffer when a line-break is needed.
-    Break(BreakToken),
-
-    /// Begin tokens are pushed onto the ring-buffer when a block is opened. They carry an offset
-    Begin(BeginToken),
-
-    /// End tokens are pushed onto the ring-buffer when a block is closed.
-    End,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_buf_entry_debug() {
-        let entry = BufEntry {
-            token: Token::String(Cow::Borrowed("hello")),
-            size: 5,
-        };
-        assert_eq!(
-            format!("{:?}", entry),
-            "BufEntry { token: String(\"hello\"), size: 5 }",
-        );
-    }
-
-    #[test]
-    fn test_token_debug() {
-        let token = Token::String(Cow::Borrowed("hello"));
-        assert_eq!(format!("{:?}", token), "String(\"hello\")",);
+        match self {
+            TokenTree::Ident(i) => {
+                //
+                out.push_str(&format!("{: <6} {}", "Ident", i.to_string()))
+            }
+            TokenTree::Punct(p) => {
+                //
+                out.push_str(&format!("{: <6} {}", "Punct", p.to_string()))
+            }
+            TokenTree::Literal(l) => {
+                //
+                out.push_str(&format!("{: <6} {}", "Lit", l.to_string()))
+            }
+            TokenTree::Group(g) => {
+                if start == Position::from(g.span_open().start()) {
+                    let open = match g.delimiter() {
+                        proc_macro2::Delimiter::Parenthesis => "(",
+                        proc_macro2::Delimiter::Brace => "{",
+                        proc_macro2::Delimiter::Bracket => "[",
+                        proc_macro2::Delimiter::None => "",
+                    };
+                    out.push_str(&format!("{: <6} {}", "Group", open));
+                } else {
+                    let close = match g.delimiter() {
+                        proc_macro2::Delimiter::Parenthesis => ")",
+                        proc_macro2::Delimiter::Brace => "}",
+                        proc_macro2::Delimiter::Bracket => "]",
+                        proc_macro2::Delimiter::None => "",
+                    };
+                    out.push_str(&format!("{: <6} {}", "Group", close));
+                }
+            }
+        }
+        //        span.source_text().unwrap_or("<None>".into()),
+        out
     }
 }

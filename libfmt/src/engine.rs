@@ -129,7 +129,7 @@ impl Engine {
             self.scan_buf.clear();
         }
         let right = self.scan_buf.push(BufEntry {
-            token: Token::Begin(token),
+            token: Scan::Begin(token),
             size: -self.right_total,
         });
         self.scan_stack.push_back(right);
@@ -147,9 +147,9 @@ impl Engine {
             self.print_end();
         } else {
             if !self.scan_buf.is_empty() {
-                if let Token::Break(break_token) = self.scan_buf.last().token {
+                if let Scan::Break(break_token) = self.scan_buf.last().token {
                     if self.scan_buf.len() >= 2 {
-                        if let Token::Begin(_) = self.scan_buf.second_last().token {
+                        if let Scan::Begin(_) = self.scan_buf.second_last().token {
                             self.scan_buf.pop_last();
                             self.scan_buf.pop_last();
                             self.scan_stack.pop_back();
@@ -166,7 +166,7 @@ impl Engine {
                 }
             }
             let right = self.scan_buf.push(BufEntry {
-                token: Token::End,
+                token: Scan::End,
                 size: -1,
             });
             self.scan_stack.push_back(right);
@@ -189,7 +189,7 @@ impl Engine {
             self.check_stack(0);
         }
         let right = self.scan_buf.push(BufEntry {
-            token: Token::Break(token),
+            token: Scan::Break(token),
             size: -self.right_total,
         });
         self.scan_stack.push_back(right);
@@ -209,7 +209,7 @@ impl Engine {
             // Store the string and its length in the scan buffer
             let len = string.len() as isize;
             self.scan_buf.push(BufEntry {
-                token: Token::String(string),
+                token: Scan::String(string),
                 size: len,
             });
 
@@ -228,14 +228,14 @@ impl Engine {
 
         match &mut self.scan_buf.last_mut().token {
             // Update the previous break to include detected offset change
-            Token::Break(token) => token.offset += offset,
+            Scan::Break(token) => token.offset += offset,
 
             // Nothing to do here
-            Token::Begin(_) => {}
+            Scan::Begin(_) => {}
 
             // The algorithm should never reach this point as there will always be a break or begin
             // token present if `offset` is being called.
-            Token::String(_) | Token::End => unreachable!(),
+            Scan::String(_) | Scan::End => unreachable!(),
         }
 
         trace!("{}", self);
@@ -249,14 +249,14 @@ impl Engine {
         for &index in self.scan_stack.iter().rev() {
             let entry = &self.scan_buf[index];
             match entry.token {
-                Token::Begin(_) => {
+                Scan::Begin(_) => {
                     depth -= 1;
                     if depth == 0 {
                         if entry.size < 0 {
                             let actual_width = entry.size + self.right_total;
                             if actual_width > max {
                                 self.scan_buf.push(BufEntry {
-                                    token: Token::String(Cow::Borrowed("")),
+                                    token: Scan::String(Cow::Borrowed("")),
                                     size: SIZE_INFINITY,
                                 });
                                 self.right_total += SIZE_INFINITY;
@@ -265,9 +265,9 @@ impl Engine {
                         break;
                     }
                 }
-                Token::End => depth += 1,
-                Token::Break(_) => {}
-                Token::String(_) => unreachable!(),
+                Scan::End => depth += 1,
+                Scan::Break(_) => {}
+                Scan::String(_) => unreachable!(),
             }
         }
         self.scan_end();
@@ -303,7 +303,7 @@ impl Engine {
         while let Some(&index) = self.scan_stack.back() {
             let entry = &mut self.scan_buf[index];
             match entry.token {
-                Token::Begin(_) => {
+                Scan::Begin(_) => {
                     if depth == 0 {
                         break;
                     }
@@ -311,19 +311,19 @@ impl Engine {
                     entry.size += self.right_total;
                     depth -= 1;
                 }
-                Token::End => {
+                Scan::End => {
                     self.scan_stack.pop_back().unwrap();
                     entry.size = 1;
                     depth += 1;
                 }
-                Token::Break(_) => {
+                Scan::Break(_) => {
                     self.scan_stack.pop_back().unwrap();
                     entry.size += self.right_total;
                     if depth == 0 {
                         break;
                     }
                 }
-                Token::String(_) => unreachable!(),
+                Scan::String(_) => unreachable!(),
             }
         }
 
@@ -340,19 +340,19 @@ impl Engine {
             let left = self.scan_buf.pop_first();
 
             match left.token {
-                Token::String(string) => {
+                Scan::String(string) => {
                     if self.skip_trailing_comma(&string) {
                         continue;
                     }
                     self.left_total += left.size;
                     self.print_string(string);
                 }
-                Token::Break(token) => {
+                Scan::Break(token) => {
                     self.left_total += token.blank_space as isize;
                     self.print_break(token, left.size);
                 }
-                Token::Begin(token) => self.print_begin(token, left.size),
-                Token::End => self.print_end(),
+                Scan::Begin(token) => self.print_begin(token, left.size),
+                Scan::End => self.print_end(),
             }
 
             if self.scan_buf.is_empty() {
@@ -367,7 +367,7 @@ impl Engine {
     /// is an End token, then skip the trailing comma.
     fn skip_trailing_comma(&self, value: &str) -> bool {
         if value == "," && !self.scan_buf.is_empty() {
-            if let Token::End = &self.scan_buf.first().token {
+            if let Scan::End = &self.scan_buf.first().token {
                 return true;
             }
         }
