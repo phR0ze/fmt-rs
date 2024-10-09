@@ -24,7 +24,9 @@ use std::path::Path;
 use tracing::trace;
 
 /// Dummy value to use when syn requires a source token
-pub(crate) const DUMMY: &str = "libfmt_dummy";
+pub(crate) const DUMMY_STRUCT: &str = "libfmt_dummy_struct";
+pub(crate) const DUMMY_FIELD: &str = "libfmt_dummy_field";
+pub(crate) const DUMMY_VARIANT: &str = "libfmt_dummy_variant";
 
 // Re-export the public API
 pub use error::{Error, Result};

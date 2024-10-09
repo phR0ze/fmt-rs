@@ -1,5 +1,5 @@
 use crate::{
-    model::{Comment, Config, Position, Source, TokenExt},
+    model::{Comment, Config, Position, Source, TokenExt, Tokens},
     Error, Result,
 };
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
@@ -55,9 +55,10 @@ fn inject_tokens(
     prev: Option<TokenTree>,
 ) -> Vec<TokenTree> {
     let mut result: Vec<TokenTree> = vec![];
+    let root = prev.is_none();
 
     // If we have no tokens at all we might still have comments
-    if tokens.is_empty() && prev.is_none() {
+    if root && tokens.is_empty() {
         inject_comments(source, &mut result, None, None, None);
         return result;
     }
@@ -127,6 +128,12 @@ fn inject_tokens(
         prev = result.last().as_deref().cloned();
     }
 
+    // If the source hasn't been fully processed yet we need to inject any trailing comments
+    if root && source.get_pos() < source.end() {
+        inject_comments(source, &mut result, None, prev.as_ref(), None);
+        return result;
+    }
+
     result
 }
 
@@ -159,27 +166,25 @@ fn inject_comments(
             if !str.is_empty() {
                 // Will be none if there are no comments
                 if let Some(comments) = from_str(&str, prev_token.is_some()) {
+                    let no_tokens = tokens.is_empty();
                     for comment in &comments {
-                        if curr_span.is_none() {
+                        // Only use inner comments when there are no tokens and no current span
+                        if no_tokens && curr_span.is_none() {
                             inject_comment(tokens, comment, Doc::Inner);
                         } else {
                             inject_comment(tokens, comment, Doc::Outer);
                         }
                     }
 
-                    // Check for dummy injection or comments that were missed
+                    // If there is no source token after this we need to inject a placeholder token
+                    // or else the syn package will barf.
                     if next_token.is_none() {
-                        // Only the first comment can be a trailing one as anything after would be
-                        // on a newline.
-                        let comment = comments.first().unwrap();
-
-                        // If there is no source token after this we need to inject a placeholder token
-                        // or else the syn package will barf.
-                        if let Some(prev) = prev_token {
-                            // Comments trailing fields or code blocks
-                            // e.g. `a: i32, // Field a` or `println!("\n"); // Block comment`
-                            if let TokenTree::Punct(punct) = prev {
-                                if comment.is_trailing() {
+                        // Only the first comment can be trailing as anything after would be on a
+                        // newline.
+                        if comments.first().unwrap().is_trailing() {
+                            let tokens = Tokens::from(tokens);
+                            if let Some(prev) = prev_token {
+                                if let TokenTree::Punct(punct) = prev {
                                     // Dummy field would be valid after a comma as function arguments
                                     // woudn't qualify for trailing comments
                                     if punct.as_char() == ',' {
@@ -208,7 +213,7 @@ fn inject_comments(
 ///
 /// * ***tokens***: Token stream to inject the dummy into
 fn inject_dummy_variant(tokens: &mut Vec<TokenTree>) {
-    let token = TokenTree::from(Ident::new(crate::DUMMY, Span::call_site()));
+    let token = TokenTree::from(Ident::new(crate::DUMMY_VARIANT, Span::call_site()));
     trace!("{}", token.to_str(&token.span()));
     tokens.push(token);
 
@@ -223,7 +228,7 @@ fn inject_dummy_variant(tokens: &mut Vec<TokenTree>) {
 ///
 /// * ***tokens***: Token stream to inject the dummy into
 fn inject_dummy_field(tokens: &mut Vec<TokenTree>) {
-    let token = TokenTree::from(Ident::new(crate::DUMMY, Span::call_site()));
+    let token = TokenTree::from(Ident::new(crate::DUMMY_FIELD, Span::call_site()));
     trace!("{}", token.to_str(&token.span()));
     tokens.push(token);
 
@@ -248,7 +253,7 @@ fn inject_dummy_struct(tokens: &mut Vec<TokenTree>) {
     trace!("{}", token.to_str(&token.span()));
     tokens.push(token);
 
-    let token = TokenTree::from(Ident::new(crate::DUMMY, Span::call_site()));
+    let token = TokenTree::from(Ident::new(crate::DUMMY_STRUCT, Span::call_site()));
     trace!("{}", token.to_str(&token.span()));
     tokens.push(token);
 
@@ -642,6 +647,7 @@ mod tests {
         }
     }
 
+    #[traced_test]
     #[test]
     fn test_trailing_variant() {
         let source = indoc! {r#"
@@ -660,7 +666,6 @@ mod tests {
         // );
     }
 
-    #[traced_test]
     #[test]
     fn test_trailing_regular_single() {
         let source = indoc! {r#"
@@ -669,14 +674,12 @@ mod tests {
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
         assert_eq!(tokens.clone().comment_count(), 1);
-        // assert_eq!(tokens.recursive_count(), 6);
-        // assert_eq!(
-        //     tokens.comments_after((0, 10)),
-        //     vec![Comment::LineTrailing(" A struct".into())]
-        // );
+        assert_eq!(
+            tokens.comments_after((0, 10)),
+            vec![Comment::LineTrailing(" A struct".into())]
+        );
     }
 
-    #[traced_test]
     #[test]
     fn test_trailing_field_multiple() {
         let source = indoc! {r#"
@@ -899,6 +902,7 @@ mod tests {
         );
     }
 
+    #[traced_test]
     #[test]
     fn test_only_comments() {
         let source = indoc! {r#"

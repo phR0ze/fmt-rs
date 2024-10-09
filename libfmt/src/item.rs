@@ -1,7 +1,7 @@
 use crate::attrs;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::{engine::Engine, DUMMY};
+use crate::{engine::Engine, DUMMY_FIELD};
 use proc_macro2::TokenStream;
 use syn::{
     Fields, FnArg, ForeignItem, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
@@ -217,7 +217,7 @@ impl Engine {
         self.outer_attrs(&item.attrs);
 
         // Don't print DUMMY value that was used to trick syn for comments
-        if item.ident == DUMMY {
+        if item.ident == DUMMY_FIELD {
             return;
         }
 
@@ -237,7 +237,7 @@ impl Engine {
                 while let Some(field) = iter.next() {
                     // Don't print DUMMY fields used for trailing comments
                     if let Some(ident) = field.ident.as_ref() {
-                        if ident == DUMMY {
+                        if ident == DUMMY_FIELD {
                             continue;
                         }
                     }
