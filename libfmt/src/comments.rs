@@ -154,7 +154,7 @@ fn inject_comments(
                         if no_tokens && curr_span.is_none() {
                             comment.set_inner();
                         }
-                        inject_comment(tokens, comment);
+                        tokens.inject_comment(comment);
                     }
 
                     // If there is no source token after this we need to inject a placeholder token
@@ -163,13 +163,13 @@ fn inject_comments(
                         // Only the first comment can be trailing as anything after would be on a
                         // newline.
                         if comments.first().unwrap().is_trailing() {
-                            println!("{}", tokens.to_str());
+                            // println!("{}", tokens.to_str());
                             if tokens.is_field() {
-                                inject_dummy_field(tokens);
+                                tokens.inject_dummy_field();
                             } else if tokens.is_statement() {
-                                inject_dummy_struct(tokens);
-                            } else {
-                                inject_dummy_variant(tokens);
+                                tokens.inject_dummy_struct();
+                            } else if tokens.is_variant() {
+                                tokens.inject_dummy_variant();
                             }
                         }
                     }
@@ -182,107 +182,6 @@ fn inject_comments(
     if source.get_pos() < end {
         source.set_pos(end);
     }
-}
-
-/// Inject a dummy varient tokens to ensure that the token stream is valid for syn
-///
-/// * ***tokens***: Token stream to inject the dummy into
-fn inject_dummy_variant(tokens: &mut Tokens) {
-    let token = TokenTree::from(Ident::new(crate::DUMMY_VARIANT, Span::call_site()));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Punct::new(',', Spacing::Alone));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-}
-
-/// Inject dummy field tokens to ensure that the token stream is valid for syn. Trailing comments
-/// require a dummy field after as they are injected as outer comments and syn checks that there is
-/// an associated field.
-///
-/// * ***tokens***: Token stream to inject the dummy into
-fn inject_dummy_field(tokens: &mut Tokens) {
-    let token = TokenTree::from(Ident::new(crate::DUMMY_FIELD, Span::call_site()));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Punct::new(':', Spacing::Alone));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Ident::new("i32", Span::call_site()));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Punct::new(',', Spacing::Alone));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-}
-
-/// Inject a dummy struct tokens to ensure that the token stream is valid for syn
-///
-/// * ***tokens***: Token stream to inject the dummy into
-fn inject_dummy_struct(tokens: &mut Tokens) {
-    let token = TokenTree::from(Ident::new("struct", Span::call_site()));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Ident::new(crate::DUMMY_STRUCT, Span::call_site()));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    let token = TokenTree::from(Punct::new(';', Spacing::Alone));
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-}
-
-/// Translate the comment into inner doc tokens which follows proc_macro2 precedence of storing doc
-/// comments as attributes. We are just leveraging this pattern to trick syn into passing through
-/// regular comments as inner doc comments which can be allowed anywhere. It abuses the system
-/// slightly but we'll strip them back out later during scaning.
-///
-/// * ***tokens***: Token stream to inject the comment into
-/// * ***comment***: Comment to inject
-fn inject_comment(tokens: &mut Tokens, comment: &Comment) {
-    // Spans are an optional feature in proc_macro2 that luckily syn doesn't take into account. This
-    // means being unable to set them due to to being private doesn't matter.
-    let token: TokenTree = Punct::new('#', Spacing::Alone).into();
-    trace!("{}", token.to_str(&token.span()));
-    tokens.push(token);
-
-    if comment.is_inner() {
-        let token: TokenTree = Punct::new('!', Spacing::Alone).into();
-        trace!("{}", token.to_str(&token.span()));
-        tokens.push(token);
-    }
-
-    // Create and log new comment group
-    let mut stream = vec![];
-
-    trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "[");
-
-    let token: TokenTree = Ident::new(&comment.attr_name(), Span::call_site()).into();
-    trace!("  {}", token.to_str(&token.span()));
-    stream.push(token);
-
-    let token: TokenTree = Punct::new('=', Spacing::Alone).into();
-    trace!("  {}", token.to_str(&token.span()));
-    stream.push(token);
-
-    let token: TokenTree = Literal::string(&comment.text()).into();
-    trace!("  {}", token.to_str(&token.span()));
-    stream.push(token);
-
-    tokens.push(
-        Group::new(
-            Delimiter::Bracket,
-            TokenStream::from_iter::<Vec<TokenTree>>(stream),
-        )
-        .into(),
-    );
-
-    trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "]");
 }
 
 /// Parse comments from the given string
@@ -431,17 +330,15 @@ fn from_str(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{pos, TokenExt};
+    use crate::model::pos;
     use core::panic;
     use indoc::indoc;
     use itertools::{peek_nth, PeekNth};
     use proc_macro2::TokenStream;
     use std::str::FromStr;
-    use tracing_test::traced_test;
 
     trait TokenTestsExt {
         fn as_group(self) -> Group;
-        fn as_ident(self) -> Ident;
         fn as_literal(self) -> Literal;
         fn to_comment(&self) -> Option<Comment>;
     }
@@ -451,13 +348,6 @@ mod tests {
                 group
             } else {
                 panic!("Expected a group token, found: {:?}", self);
-            }
-        }
-        fn as_ident(self) -> Ident {
-            if let TokenTree::Ident(ident) = self {
-                ident
-            } else {
-                panic!("Expected a ident token, found: {:?}", self);
             }
         }
         fn as_literal(self) -> Literal {
@@ -621,23 +511,21 @@ mod tests {
         }
     }
 
-    #[traced_test]
     #[test]
     fn test_trailing_variant() {
         let source = indoc! {r#"
             enum Foo {
-                A, // A field
+                A, // A variant
             }
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert_eq!(tokens.comment_count(), 1);
-        assert_eq!(tokens.recursive_count(), 10);
-        // let group = tokens.get((0, 11)).as_group();
-        // let tokens = group.stream().into_iter();
-        // assert_eq!(
-        //     tokens.comments_after((1, 10)),
-        //     vec![Comment::LineTrailing(" A field".into())]
-        // );
+        let group = tokens.get((0, 9)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_after((1, 5)),
+            vec![Comment::line_trailing(" A variant".into())]
+        );
     }
 
     #[test]
@@ -792,7 +680,6 @@ mod tests {
         );
     }
 
-    #[traced_test]
     #[test]
     fn test_trailing_comments() {
         let source = indoc! {r#"
@@ -804,22 +691,22 @@ mod tests {
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
-        // // Get the group at postiion which you can see with tracing output
-        // let group = tokens.get((0, 11)).as_group();
-        // let tokens = group.stream().into_iter();
+        // Get the group at postiion which you can see with tracing output
+        let group = tokens.get((0, 11)).as_group();
+        let tokens = group.stream().into_iter();
 
-        // assert_eq!(tokens.comment_count(), 2);
-        // assert_eq!(tokens.recursive_count(), 22);
+        assert_eq!(tokens.comment_count(), 2);
+        assert_eq!(tokens.recursive_count(), 22);
 
-        // // Check that the first comment
-        // assert_eq!(
-        //     tokens.comments_after((1, 10)),
-        //     vec![Comment::LineTrailing(" Field a".into())]
-        // );
-        // assert_eq!(
-        //     tokens.comments_after((2, 10)),
-        //     vec![Comment::LineTrailing(" Field b".into())]
-        // );
+        // Check that the first comment
+        assert_eq!(
+            tokens.comments_after((1, 10)),
+            vec![Comment::line_trailing(" Field a".into())]
+        );
+        assert_eq!(
+            tokens.comments_after((2, 10)),
+            vec![Comment::line_trailing(" Field b".into())]
+        );
     }
 
     #[test]

@@ -177,6 +177,7 @@ mod tests {
         );
     }
 
+    #[traced_test]
     #[test]
     fn test_comment_inline_regular() {
         let source = indoc! {r#"
@@ -284,7 +285,6 @@ mod tests {
         );
     }
 
-    #[traced_test]
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"

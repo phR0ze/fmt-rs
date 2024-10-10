@@ -1,29 +1,71 @@
-use super::Position;
-use proc_macro2::{Span, TokenStream, TokenTree};
+use super::{Comment, Position};
+use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
+use syn::token::Token;
+use tracing::trace;
 
 /// Extension trait for proc_macro2::TokenTree
 pub(crate) trait TokenExt {
-    fn is_ident(&self) -> Option<()>;
-    fn is_punct(&self, char: char) -> Option<()>;
+    fn is_comment_ident(&self) -> bool;
+    fn is_comment_group(&self) -> bool;
+    fn is_punct(&self, char: char) -> bool;
     fn to_str(&self, span: &Span) -> String;
 }
 
-impl TokenExt for TokenTree {
-    /// Determine if the token is an identifier
-    fn is_ident(&self) -> Option<()> {
-        match self {
-            TokenTree::Ident(_) => Some(()),
-            _ => None,
+impl TokenExt for Option<&TokenTree> {
+    fn is_comment_ident(&self) -> bool {
+        if let Some(token) = self {
+            return token.is_comment_ident();
         }
+        false
+    }
+
+    fn is_comment_group(&self) -> bool {
+        if let Some(token) = self {
+            return token.is_comment_group();
+        }
+        false
+    }
+
+    fn is_punct(&self, char: char) -> bool {
+        if let Some(token) = self {
+            return token.is_punct(char);
+        }
+        false
+    }
+    fn to_str(&self, span: &Span) -> String {
+        if let Some(token) = self {
+            return token.to_str(span);
+        }
+        "".into()
+    }
+}
+
+impl TokenExt for TokenTree {
+    /// Determine if the token is a comment identifier
+    fn is_comment_ident(&self) -> bool {
+        if let TokenTree::Ident(i) = self {
+            return i.to_string().starts_with("comment_");
+        }
+        false
+    }
+
+    /// Determine if the token is a comment group
+    fn is_comment_group(&self) -> bool {
+        if let TokenTree::Group(g) = self {
+            let stream = g.stream().into_iter().collect::<Vec<_>>();
+            if stream.len() == 3 && stream[0].is_comment_ident() {
+                return true;
+            }
+        }
+        false
     }
 
     /// Determine if the token is the given punctuation character
-    fn is_punct(&self, char: char) -> Option<()> {
+    fn is_punct(&self, char: char) -> bool {
         match self {
             TokenTree::Punct(p) => p.as_char() == char,
             _ => false,
         }
-        .then_some(())
     }
 
     /// Convert the token and span into a string for debugging purposes.  The span is passed in
@@ -96,10 +138,49 @@ impl Tokens {
         self.0.push(token);
     }
 
+    /// Determine if the most recent tokens are a comment and if so advance the given index to
+    /// consume the comment
+    ///
+    /// * ***i*** - index tracking our location in the token stream
+    /// * ***return*** - true if the most recent tokens are a comment
+    fn is_comment(&self, i: &mut isize) -> bool {
+        // Comments are composed of a minimum of 2 tokens
+        if self.0.len() >= 2 {
+            // Check for group with comment ident
+            if self.get(*i).is_comment_group() {
+                if self.get(*i - 1).is_punct('!') || self.get(*i - 1).is_punct('#') {
+                    if self.get(*i - 1).is_punct('#') {
+                        *i -= 2; // skip group and punct
+                    } else {
+                        *i -= 3; // skip group and (2) puncts
+                    }
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Advance the given index while the most recent tokens are a comment
+    ///
+    /// * ***i*** - index tracking our location in the token stream
+    fn while_is_comment(&self, i: &mut isize) {
+        loop {
+            if !self.is_comment(i) {
+                break;
+            }
+        }
+    }
+
     /// Determine if the most recent tokens are a statement
     pub(crate) fn is_statement(&self) -> bool {
         if self.0.len() > 0 {
-            if let Some(TokenTree::Punct(p)) = self.get(-1) {
+            // Skip comments
+            let mut i = -1;
+            self.while_is_comment(&mut i);
+
+            // Check following token
+            if let Some(TokenTree::Punct(p)) = self.get(i) {
                 if p.as_char() == ';' {
                     return true;
                 }
@@ -112,11 +193,15 @@ impl Tokens {
     pub(crate) fn is_field(&self) -> bool {
         // Fields are composed of a minimum of 4 tokens: "a: i32,"
         if self.0.len() >= 4 {
-            // Check for the comma
-            if let Some(TokenTree::Punct(p)) = self.get(-1) {
+            // Skip comments
+            let mut i = -1;
+            self.while_is_comment(&mut i);
+
+            // Check the following token for comma
+            if let Some(TokenTree::Punct(p)) = self.get(i) {
                 if p.as_char() == ',' {
                     // Consume until we find the colon or end
-                    let mut i = -2;
+                    i -= 1;
                     while let Some(token) = self.get(i) {
                         if let TokenTree::Punct(p) = token {
                             // An addtional comma means we have a different kind
@@ -138,11 +223,15 @@ impl Tokens {
     pub(crate) fn is_variant(&self) -> bool {
         // Variants are composed of a minimum of 2 tokens: "A,"
         if self.0.len() >= 2 {
-            // Check for the comma
-            if let Some(TokenTree::Punct(p)) = self.get(-1) {
+            // Skip comments
+            let mut i = -1;
+            self.while_is_comment(&mut i);
+
+            // Check for the following token for comma
+            if let Some(TokenTree::Punct(p)) = self.get(i) {
                 if p.as_char() == ',' {
                     // Consume until we find a comma or the end
-                    let mut i = -2;
+                    i -= 1;
                     while let Some(token) = self.get(i) {
                         if let TokenTree::Punct(p) = token {
                             if p.as_char() == ',' {
@@ -162,6 +251,107 @@ impl Tokens {
             }
         }
         false
+    }
+
+    /// Inject a dummy varient tokens to ensure that the token stream is valid for syn
+    ///
+    /// * ***tokens***: Token stream to inject the dummy into
+    pub(crate) fn inject_dummy_variant(&mut self) {
+        let token = TokenTree::from(Ident::new(crate::DUMMY_VARIANT, Span::call_site()));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Punct::new(',', Spacing::Alone));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+    }
+
+    /// Inject dummy field tokens to ensure that the token stream is valid for syn. Trailing comments
+    /// require a dummy field after as they are injected as outer comments and syn checks that there is
+    /// an associated field.
+    ///
+    /// * ***tokens***: Token stream to inject the dummy into
+    pub(crate) fn inject_dummy_field(&mut self) {
+        let token = TokenTree::from(Ident::new(crate::DUMMY_FIELD, Span::call_site()));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Punct::new(':', Spacing::Alone));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Ident::new("i32", Span::call_site()));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Punct::new(',', Spacing::Alone));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+    }
+
+    /// Inject a dummy struct tokens to ensure that the token stream is valid for syn
+    ///
+    /// * ***tokens***: Token stream to inject the dummy into
+    pub(crate) fn inject_dummy_struct(&mut self) {
+        let token = TokenTree::from(Ident::new("struct", Span::call_site()));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Ident::new(crate::DUMMY_STRUCT, Span::call_site()));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        let token = TokenTree::from(Punct::new(';', Spacing::Alone));
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+    }
+
+    /// Translate the comment into inner doc tokens which follows proc_macro2 precedence of storing doc
+    /// comments as attributes. We are just leveraging this pattern to trick syn into passing through
+    /// regular comments as inner doc comments which can be allowed anywhere. It abuses the system
+    /// slightly but we'll strip them back out later during scaning.
+    ///
+    /// * ***tokens***: Token stream to inject the comment into
+    /// * ***comment***: Comment to inject
+    pub(crate) fn inject_comment(&mut self, comment: &Comment) {
+        // Spans are an optional feature in proc_macro2 that luckily syn doesn't take into account. This
+        // means being unable to set them due to to being private doesn't matter.
+        let token: TokenTree = Punct::new('#', Spacing::Alone).into();
+        trace!("{}", token.to_str(&token.span()));
+        self.push(token);
+
+        if comment.is_inner() {
+            let token: TokenTree = Punct::new('!', Spacing::Alone).into();
+            trace!("{}", token.to_str(&token.span()));
+            self.push(token);
+        }
+
+        // Create and log new comment group
+        let mut stream = vec![];
+
+        trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "[");
+
+        let token: TokenTree = Ident::new(&comment.attr_name(), Span::call_site()).into();
+        trace!("  {}", token.to_str(&token.span()));
+        stream.push(token);
+
+        let token: TokenTree = Punct::new('=', Spacing::Alone).into();
+        trace!("  {}", token.to_str(&token.span()));
+        stream.push(token);
+
+        let token: TokenTree = Literal::string(&comment.text()).into();
+        trace!("  {}", token.to_str(&token.span()));
+        stream.push(token);
+
+        self.push(
+            Group::new(
+                Delimiter::Bracket,
+                TokenStream::from_iter::<Vec<TokenTree>>(stream),
+            )
+            .into(),
+        );
+
+        trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "]");
     }
 
     /// Convert the token stream into a string for debugging purposes
@@ -248,7 +438,7 @@ mod tests {
                 B((&'a i32, i32)),
             }
         "#});
-        println!("{}", stream.to_str());
+        // println!("{}", stream.to_str());
         let group = stream[2].tokens();
         assert_eq!(group.is_variant(), true);
 
@@ -286,7 +476,8 @@ mod tests {
                 B,
             }
         "#});
-        let group = stream[2].tokens();
+        let mut group = stream[2].tokens();
+        group.inject_comment(&Comment::line_trailing("trailing"));
         assert_eq!(group.is_variant(), true);
 
         // Fail
@@ -355,6 +546,16 @@ mod tests {
         let group = stream[2].tokens();
         assert_eq!(group.is_field(), true);
 
+        // With comment first
+        let stream = to_tokens(indoc! {r#"
+            struct Foo {
+                bar: Box<Option<i32>>,
+            }
+        "#});
+        let mut group = stream[2].tokens();
+        group.inject_comment(&Comment::line_trailing("trailing"));
+        assert_eq!(group.is_field(), true);
+
         // Fail
         let stream = to_tokens(indoc! {r#"
             struct Foo {
@@ -371,6 +572,13 @@ mod tests {
         let stream = to_tokens(indoc! {r#"
             struct Foo;
         "#});
+        assert_eq!(stream.is_statement(), true);
+
+        // Comment first
+        let mut stream = to_tokens(indoc! {r#"
+            struct Foo;
+        "#});
+        stream.inject_comment(&Comment::line_trailing("trailing"));
         assert_eq!(stream.is_statement(), true);
 
         // Fail
