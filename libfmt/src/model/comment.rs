@@ -1,43 +1,92 @@
 use crate::Error;
 use std::str::FromStr;
 
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CommentKind {
+    Empty,
+    Line,
+    LineTrailing,
+    Block,
+    BlockInline,
+}
+
 /// Encapsulate the different types of comments that can be found in the source
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) enum Comment {
-    Empty,                // Empty line ending in a newline
-    Line(String),         // Single line comment noted by the `//` prefix
-    LineTrailing(String), // Single line comment noted by the `//` prefix that is trailing code
-    Block(String),        // Block comment noted by the `/*` prefix and `*/` suffix
-    BlockInline(String), // Block comment noted by the `/*` prefix and `*/` suffix without a newline
+pub(crate) struct Comment {
+    msg: String,       // The comment message
+    inner: bool,       // Inner or outer comment
+    kind: CommentKind, // The comment kind
 }
 
 impl Comment {
+    /// Create a new comment instance
+    pub(crate) fn new(msg: &str, kind: CommentKind) -> Self {
+        Self {
+            msg: msg.to_string(),
+            inner: false,
+            kind,
+        }
+    }
+
+    /// Create a new line trailing comment instance
+    pub(crate) fn line_trailing(msg: &str) -> Self {
+        Self::new(msg, CommentKind::LineTrailing)
+    }
+
+    /// Create a new block inline comment instance
+    pub(crate) fn block_inline(msg: &str) -> Self {
+        Self::new(msg, CommentKind::BlockInline)
+    }
+
+    /// Create a new block comment instance
+    pub(crate) fn block(msg: &str) -> Self {
+        Self::new(msg, CommentKind::Block)
+    }
+
+    /// Create a new block comment instance
+    pub(crate) fn line(msg: &str) -> Self {
+        Self::new(msg, CommentKind::Line)
+    }
+
+    /// Create a new empty comment instance
+    pub(crate) fn empty() -> Self {
+        Self {
+            msg: "".to_string(),
+            inner: false,
+            kind: CommentKind::Empty,
+        }
+    }
+
+    /// Check if the comment is an inner comment
+    pub(crate) fn is_inner(&self) -> bool {
+        self.inner
+    }
+
+    /// Set the comment as an inner comment
+    pub(crate) fn set_inner(&mut self) {
+        self.inner = true;
+    }
+
     /// Return the comment type as an attribute name
     pub(crate) fn attr_name(&self) -> String {
-        match self {
-            Self::Empty => "comment_empty".to_string(),
-            Self::Line(_) => "comment_line".to_string(),
-            Self::LineTrailing(_) => "comment_line_trailing".to_string(),
-            Self::Block(_) => "comment_block".to_string(),
-            Self::BlockInline(_) => "comment_block_inline".to_string(),
+        match self.kind {
+            CommentKind::Empty => "comment_empty".to_string(),
+            CommentKind::Line => "comment_line".to_string(),
+            CommentKind::LineTrailing => "comment_line_trailing".to_string(),
+            CommentKind::Block => "comment_block".to_string(),
+            CommentKind::BlockInline => "comment_block_inline".to_string(),
         }
     }
 
     /// Get the raw text of the comment
     pub(crate) fn text(&self) -> String {
-        match self {
-            Self::Empty => "".to_string(),
-            Self::Line(text) => text.clone(),
-            Self::LineTrailing(text) => text.clone(),
-            Self::Block(text) => text.clone(),
-            Self::BlockInline(text) => text.clone(),
-        }
+        self.msg.clone()
     }
 
     /// Check if the comment is trailing code
     pub(crate) fn is_trailing(&self) -> bool {
-        match self {
-            Self::LineTrailing(_) => true,
+        match self.kind {
+            CommentKind::LineTrailing => true,
             _ => false,
         }
     }
@@ -49,11 +98,11 @@ impl FromStr for Comment {
     fn from_str(s: &str) -> core::result::Result<Self, Self::Err> {
         if let Some((first, second)) = s.split_once(':') {
             match first.to_lowercase().as_str() {
-                "comment_empty" => Ok(Comment::Empty),
-                "comment_line" => Ok(Comment::Line(second.to_string())),
-                "comment_line_trailing" => Ok(Comment::LineTrailing(second.to_string())),
-                "comment_block" => Ok(Comment::Block(second.to_string())),
-                "comment_block_inline" => Ok(Comment::BlockInline(second.to_string())),
+                "comment_empty" => Ok(Comment::new("", CommentKind::Empty)),
+                "comment_line" => Ok(Comment::new(second, CommentKind::Line)),
+                "comment_line_trailing" => Ok(Comment::new(second, CommentKind::LineTrailing)),
+                "comment_block" => Ok(Comment::new(second, CommentKind::Block)),
+                "comment_block_inline" => Ok(Comment::new(second, CommentKind::BlockInline)),
                 _ => Err(Error::new("failed to parse comment")),
             }
         } else {
@@ -64,14 +113,16 @@ impl FromStr for Comment {
 
 impl std::fmt::Display for Comment {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        match self {
-            Self::Empty => write!(f, "Comment::Empty"),
-            Self::Line(text) => write!(f, "Comment::Line({})", text.escape_default()),
-            Self::LineTrailing(text) => {
-                write!(f, "Comment::LineTrailing({})", text.escape_default())
+        match self.kind {
+            CommentKind::Empty => write!(f, "Comment::Empty"),
+            CommentKind::Line => write!(f, "Comment::Line({})", self.msg.escape_default()),
+            CommentKind::LineTrailing => {
+                write!(f, "Comment::LineTrailing({})", self.msg.escape_default())
             }
-            Self::Block(text) => write!(f, "Comment::Block({})", text.escape_default()),
-            Self::BlockInline(text) => write!(f, "Comment::BlockInline({})", text.escape_default()),
+            CommentKind::Block => write!(f, "Comment::Block({})", self.msg.escape_default()),
+            CommentKind::BlockInline => {
+                write!(f, "Comment::BlockInline({})", self.msg.escape_default())
+            }
         }
     }
 }

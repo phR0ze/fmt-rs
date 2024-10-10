@@ -1,5 +1,5 @@
 use super::Position;
-use proc_macro2::{Span, TokenTree};
+use proc_macro2::{Span, TokenStream, TokenTree};
 
 /// Extension trait for proc_macro2::TokenTree
 pub(crate) trait TokenExt {
@@ -68,6 +68,10 @@ impl TokenExt for TokenTree {
 pub(crate) struct Tokens(Vec<TokenTree>);
 
 impl Tokens {
+    pub(crate) fn new() -> Self {
+        Tokens(Vec::new())
+    }
+
     /// Get the given token at the given index.  This allows for negative indexing
     pub(crate) fn get(&self, i: isize) -> Option<&TokenTree> {
         if i < 0 {
@@ -75,6 +79,21 @@ impl Tokens {
         } else {
             self.0.get(i as usize)
         }
+    }
+
+    /// Is the token stream empty
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Get the last token in the stream
+    pub(crate) fn last(&self) -> Option<&TokenTree> {
+        self.0.last()
+    }
+
+    /// Push a new token onto the end of the token stream
+    pub(crate) fn push(&mut self, token: TokenTree) {
+        self.0.push(token);
     }
 
     /// Determine if the most recent tokens are a statement
@@ -163,6 +182,11 @@ impl Tokens {
         }
         recurse(&mut self.0.iter())
     }
+
+    /// Convert the token stream into a TokenStream
+    pub(crate) fn into_token_stream(self) -> TokenStream {
+        self.0.into_iter().collect()
+    }
 }
 
 /// Implements index operator for Tokens
@@ -177,6 +201,13 @@ impl std::ops::Index<usize> for Tokens {
 impl From<Vec<TokenTree>> for Tokens {
     fn from(tokens: Vec<TokenTree>) -> Self {
         Tokens(tokens)
+    }
+}
+
+/// Implements into Vec<TokenTree> for Tokens
+impl Into<Vec<TokenTree>> for Tokens {
+    fn into(self) -> Vec<TokenTree> {
+        self.0
     }
 }
 
