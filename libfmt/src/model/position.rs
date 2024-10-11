@@ -40,7 +40,8 @@ impl Default for Position {
     }
 }
 
-/// Subtract usize from Position
+/// Subtract usize from Position. This is not generally safe and is only for
+/// convenience when calculating the source end minus one as it is artificially always more than zero.
 impl std::ops::Sub<usize> for Position {
     type Output = Self;
 

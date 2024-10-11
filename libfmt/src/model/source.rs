@@ -8,7 +8,9 @@ use super::Position;
 pub(crate) struct Source {
     src: Vec<Vec<char>>,
     pos: Position,
-    end: Position, // One past the source end
+
+    /// Intentially one past the end
+    end: Position,
 }
 
 impl Source {
@@ -37,13 +39,6 @@ impl Source {
         }
     }
 
-    /// Advance the current position by one character relative to the source. This means that source
-    /// lines and columns are taken into account and position will advance accordingly. Once the end
-    /// of the source is reached it will refuse to advance further.
-    pub(crate) fn adv_one(&mut self) {
-        self.pos = self.calculate_adv(self.pos);
-    }
-
     /// Get the character at the current position
     pub(crate) fn curr(&self) -> Option<&char> {
         self.get(self.pos)
@@ -60,6 +55,29 @@ impl Source {
         self.get(pos).filter(|x| **x == c.into()).is_some()
     }
 
+    /// Advance the current position by one character relative to the source. This means that source
+    /// lines and columns are taken into account and position will advance accordingly. Once the end
+    /// of the source is reached it will refuse to advance further.
+    pub(crate) fn adv_one(&mut self) -> Position {
+        self.pos = self.inc(self.pos);
+        self.pos
+    }
+
+    /// Check if the given range contains a newline character
+    ///
+    /// * ***start*** - The start position, inclusive
+    /// * ***end*** - The end position inclusive
+    pub(crate) fn contains_newline<T: Into<Position>>(&self, start: T, end: T) -> bool {
+        let (mut pos, end) = (start.into(), end.into());
+        while pos < self.end && pos <= end {
+            if self.get(pos).filter(|x| *x == &'\n').is_some() {
+                return true;
+            }
+            pos = self.inc(pos);
+        }
+        false
+    }
+
     /// Get string from the current position to the given position otherwise return None.
     /// * Non inclusive of the end position
     /// * If end is past source end then all characters up to the end of the source will be returned
@@ -68,14 +86,14 @@ impl Source {
 
         if self.src.len() > 0 && self.pos < self.end && self.pos < end {
             let mut str = String::new();
-            let mut p = self.pos;
+            let mut pos = self.pos;
 
             // Not inclusive of the end position
-            while p < self.end && p < end {
-                if let Some(c) = self.get(p) {
+            while pos < self.end && pos < end {
+                if let Some(c) = self.get(pos) {
                     str.push(*c);
                 }
-                p = self.calculate_adv(p);
+                pos = self.inc(pos);
             }
             Some(str)
         } else {
@@ -96,22 +114,6 @@ impl Source {
         self.pos
     }
 
-    /// Get the character at the previous position
-    pub(crate) fn prev(&self) -> Option<&char> {
-        let p = self.pos;
-        if p.column > 0 {
-            self.get((p.line, p.column - 1))
-        } else if p.line > 0 {
-            if let Some(c) = self.src[p.line - 1].len().checked_sub(1) {
-                self.get((p.line - 1, c))
-            } else {
-                self.get((p.line - 1, 0))
-            }
-        } else {
-            None
-        }
-    }
-
     /// Set the current position if it is valid and return true. Invalid positions will not be set
     /// and will return false.
     pub(crate) fn set_pos<T: Into<Position>>(&mut self, position: T) -> bool {
@@ -130,26 +132,57 @@ impl Source {
         result
     }
 
-    /// Calculate advancing the given position by one relative to the source. This means that
+    /// Decrement the given position by one relative to the source. This means that
+    /// source lines and columns are taken into account and position will decrement accordingly.
+    /// Once the start of the source is reached it will refuse to decrement further.
+    ///
+    /// Automatically decrements to end of source if was beyond the end. This is true for self.end
+    /// which is one past the source end. Thus to iterator backward you can start with self.end
+    ///
+    /// * ***pos*** - The position to decrement
+    pub(crate) fn dec(&self, pos: Position) -> Position {
+        let mut p = pos;
+
+        if p > Position::default() {
+            if p > self.end {
+                p = self.end;
+            }
+
+            // Column can be decremented
+            if p.column > 0 {
+                if p.column > self.src[p.line].len() - 1 {
+                    return Position::new(p.line, self.src[p.line].len() - 1);
+                }
+                return Position::new(p.line, p.column - 1);
+
+            // Line can be decremented
+            } else if p.line > 0 {
+                // indexing is safe here as we checked position is within source
+                return Position::new(p.line - 1, self.src[p.line - 1].len() - 1);
+            }
+        }
+        Position::default()
+    }
+
+    /// Increment the given position by one relative to the source. This means that
     /// source lines and columns are taken into account and position will advance accordingly.
     /// Once the end of the source is reached it will refuse to advance further.
     ///
-    /// * return - newly calculated position after advancement by one
-    fn calculate_adv<T: Into<Position>>(&self, position: T) -> Position {
-        let p = position.into();
-
-        if p < self.end - 1 {
+    /// * ***pos*** - The position to increment
+    fn inc(&self, pos: Position) -> Position {
+        if pos < self.end - 1 {
             // If we are not at the end of the line, advance the column
-            if p.column < self.src[p.line].len() - 1 {
-                Position::new(p.line, p.column + 1)
+            // Indexing is safe as we know pos < end and column length is always at least 1
+            if pos.column < self.src[pos.line].len() - 1 {
+                return Position::new(pos.line, pos.column + 1);
 
             // If we are at the end of the line, advance the line
             } else {
-                Position::new(p.line + 1, 0)
+                return Position::new(pos.line + 1, 0);
             }
-        } else {
-            self.end
         }
+
+        self.end
     }
 }
 
@@ -175,6 +208,19 @@ impl CharExt for Option<&char> {
 mod tests {
     use super::super::pos;
     use super::*;
+
+    #[test]
+    fn test_contains_newline() {
+        let source = Source::new("Hello\nFoo\n");
+        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 1)), false);
+        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 2)), false);
+        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 5)), true);
+        assert_eq!(source.contains_newline(pos(0, 5), pos(0, 6)), true);
+        assert_eq!(source.contains_newline(pos(0, 5), pos(0, 7)), true);
+        assert_eq!(source.contains_newline(pos(0, 6), pos(0, 7)), false);
+        assert_eq!(source.contains_newline(pos(0, 6), pos(0, 9)), false);
+        assert_eq!(source.contains_newline(pos(1, 0), pos(1, 3)), true);
+    }
 
     #[test]
     fn test_char_is() {
@@ -203,46 +249,69 @@ mod tests {
     }
 
     #[test]
-    fn test_adv() {
-        let mut source = Source::new("Hello, World!\nThis is a test.\n");
-        source.set_pos((0, 12));
+    fn test_inc() {
+        let mut source = Source::new("Hello!\nWorld\n");
+        assert_eq!(source.curr(), Some(&'H'));
 
-        source.adv_one();
-        assert_eq!(source.get_pos(), pos(0, 13));
+        assert_eq!(source.adv_one(), pos(0, 1));
+        assert_eq!(source.curr(), Some(&'e'));
+
+        assert_eq!(source.adv_one(), pos(0, 2));
+        assert_eq!(source.curr(), Some(&'l'));
+
+        assert_eq!(source.adv_one(), pos(0, 3));
+        assert_eq!(source.curr(), Some(&'l'));
+
+        assert_eq!(source.adv_one(), pos(0, 4));
+        assert_eq!(source.curr(), Some(&'o'));
+
+        assert_eq!(source.adv_one(), pos(0, 5));
+        assert_eq!(source.curr(), Some(&'!'));
+
+        assert_eq!(source.adv_one(), pos(0, 6));
         assert_eq!(source.curr(), Some(&'\n'));
 
-        source.adv_one();
-        assert_eq!(source.get_pos(), pos(1, 0));
-        assert_eq!(source.curr(), Some(&'T'));
+        assert_eq!(source.adv_one(), pos(1, 0));
+        assert_eq!(source.curr(), Some(&'W'));
 
-        source.set_pos((1, 15));
+        assert_eq!(source.adv_one(), pos(1, 1));
+        assert_eq!(source.curr(), Some(&'o'));
+
+        assert_eq!(source.adv_one(), pos(1, 2));
+        assert_eq!(source.curr(), Some(&'r'));
+
+        assert_eq!(source.adv_one(), pos(1, 3));
+        assert_eq!(source.curr(), Some(&'l'));
+
+        assert_eq!(source.adv_one(), pos(1, 4));
+        assert_eq!(source.curr(), Some(&'d'));
+
+        assert_eq!(source.adv_one(), pos(1, 5));
         assert_eq!(source.curr(), Some(&'\n'));
 
-        // Advance off end
-        source.adv_one();
-        assert_eq!(source.get_pos(), pos(1, 16));
-        assert_eq!(source.curr(), None);
-
-        // No further advancing allowed once at end
-        source.adv_one();
-        assert_eq!(source.get_pos(), pos(1, 16));
+        assert_eq!(source.adv_one(), pos(1, 6));
         assert_eq!(source.curr(), None);
     }
 
     #[test]
-    fn test_calculate_adv() {
-        let source = Source::new("Hello\nFoo\n");
-        assert_eq!(source.calculate_adv(pos(0, 0)), pos(0, 1));
-        assert_eq!(source.calculate_adv(pos(0, 1)), pos(0, 2));
-        assert_eq!(source.calculate_adv(pos(0, 2)), pos(0, 3));
-        assert_eq!(source.calculate_adv(pos(0, 3)), pos(0, 4));
-        assert_eq!(source.calculate_adv(pos(0, 4)), pos(0, 5));
-        assert_eq!(source.calculate_adv(pos(0, 5)), pos(1, 0));
-        assert_eq!(source.calculate_adv(pos(1, 0)), pos(1, 1));
-        assert_eq!(source.calculate_adv(pos(1, 1)), pos(1, 2));
-        assert_eq!(source.calculate_adv(pos(1, 2)), pos(1, 3));
-        assert_eq!(source.calculate_adv(pos(1, 3)), pos(1, 4));
-        assert_eq!(source.calculate_adv(pos(1, 4)), pos(1, 4));
+    fn test_dec() {
+        let source = Source::new("Hello!\nWorld\n");
+
+        // Invalid position should default to end
+        assert_eq!(source.dec(pos(2, 5)), pos(1, 5));
+
+        // Invalid column len will get set to len - 1
+        assert_eq!(source.dec(pos(0, 15)), pos(0, 6));
+
+        // start from the end and work to the begining
+        assert_eq!(source.dec(source.end()), pos(1, 5));
+        assert_eq!(source.dec(pos(1, 6)), pos(1, 5));
+        assert_eq!(source.dec(pos(1, 0)), pos(0, 6));
+        assert_eq!(source.dec(pos(0, 6)), pos(0, 5));
+        assert_eq!(source.dec(pos(0, 1)), pos(0, 0));
+
+        // If zero then no more decrementing
+        assert_eq!(source.dec(pos(0, 0)), pos(0, 0));
     }
 
     #[test]
@@ -272,23 +341,6 @@ mod tests {
     }
 
     #[test]
-    fn test_prev() {
-        let mut source = Source::new("Hello, World!\nThis is a test.\n");
-
-        // No previous char
-        source.set_pos((0, 0));
-        assert_eq!(source.prev(), None);
-
-        // Previous char is 'H'
-        source.set_pos((0, 1));
-        assert_eq!(source.prev(), Some(&'H'));
-
-        // Check previous char on previous line
-        source.set_pos((1, 0));
-        assert_eq!(source.prev(), Some(&'\n'));
-    }
-
-    #[test]
     fn test_get() {
         let source = Source::new("Hello, World!\nThis is a test.\n");
         assert_eq!(source.get((0, 0)), Some(&'H'));
@@ -304,8 +356,7 @@ mod tests {
         let mut source = Source::new("");
         assert_eq!(source.get((1, 5)), None);
         assert_eq!(source.str((1, 5)), None);
-        assert_eq!(source.prev(), None);
-        source.set_pos((1, 1));
+        source.set_pos(pos(1, 1));
         assert_eq!(source.get_pos(), pos(0, 0));
         source.adv_one();
         assert_eq!(source.get_pos(), pos(0, 0));

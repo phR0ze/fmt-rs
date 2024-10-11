@@ -1,4 +1,4 @@
-use super::{Comment, Position};
+use super::{Comment, Position, Source};
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
 use syn::token::Token;
 use tracing::trace;
@@ -138,8 +138,20 @@ impl Tokens {
         self.0.push(token);
     }
 
-    /// Determine if the most recent tokens are a comment and if so advance the given index to
-    /// consume the comment
+    /// Decrement the given index while the most recent tokens are a comment as we are traversing
+    /// backwards through the token stream.
+    ///
+    /// * ***i*** - index tracking our location in the token stream
+    fn dec_while_is_comment(&self, i: &mut isize) {
+        loop {
+            if !self.is_comment(i) {
+                break;
+            }
+        }
+    }
+
+    /// Determine if the most recent tokens are a comment and if so decrement the given index to
+    /// consume the comment as we are traversing backwards through the token stream.
     ///
     /// * ***i*** - index tracking our location in the token stream
     /// * ***return*** - true if the most recent tokens are a comment
@@ -161,23 +173,12 @@ impl Tokens {
         false
     }
 
-    /// Advance the given index while the most recent tokens are a comment
-    ///
-    /// * ***i*** - index tracking our location in the token stream
-    fn while_is_comment(&self, i: &mut isize) {
-        loop {
-            if !self.is_comment(i) {
-                break;
-            }
-        }
-    }
-
     /// Determine if the most recent tokens are a statement
     pub(crate) fn is_statement(&self) -> bool {
         if self.0.len() > 0 {
             // Skip comments
             let mut i = -1;
-            self.while_is_comment(&mut i);
+            self.dec_while_is_comment(&mut i);
 
             // Check following token
             if let Some(TokenTree::Punct(p)) = self.get(i) {
@@ -195,7 +196,7 @@ impl Tokens {
         if self.0.len() >= 4 {
             // Skip comments
             let mut i = -1;
-            self.while_is_comment(&mut i);
+            self.dec_while_is_comment(&mut i);
 
             // Check the following token for comma
             if let Some(TokenTree::Punct(p)) = self.get(i) {
@@ -225,7 +226,7 @@ impl Tokens {
         if self.0.len() >= 2 {
             // Skip comments
             let mut i = -1;
-            self.while_is_comment(&mut i);
+            self.dec_while_is_comment(&mut i);
 
             // Check for the following token for comma
             if let Some(TokenTree::Punct(p)) = self.get(i) {
