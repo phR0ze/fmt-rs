@@ -1,6 +1,6 @@
-use crate::attrs;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
+use crate::{attrs, DUMMY_STRUCT};
 use crate::{engine::Engine, DUMMY_FIELD};
 use proc_macro2::TokenStream;
 use syn::{
@@ -217,7 +217,7 @@ impl Engine {
         self.outer_attrs(&item.attrs);
 
         // Don't print DUMMY value that was used to trick syn for comments
-        if item.ident == DUMMY_FIELD {
+        if item.ident == DUMMY_STRUCT {
             return;
         }
 
@@ -232,7 +232,6 @@ impl Engine {
                 self.scan_string("{");
                 self.hardbreak_if_nonempty();
 
-                // Look ahead to print trailing comments
                 let mut iter = fields.named.iter().peekable();
                 while let Some(field) = iter.next() {
                     // Don't print DUMMY fields used for trailing comments
@@ -246,7 +245,7 @@ impl Engine {
                     self.scan_field(field);
                     self.scan_string(",");
 
-                    // Scan any trailing comment from the next field's outer attributes
+                    // Look ahead to print trailing comments from the next field's outer attributes
                     let trailing = match iter.peek() {
                         Some(next) => self.scan_trailing_comment(&next.attrs),
                         None => false,

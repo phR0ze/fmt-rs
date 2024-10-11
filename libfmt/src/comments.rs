@@ -336,6 +336,7 @@ mod tests {
     use itertools::{peek_nth, PeekNth};
     use proc_macro2::TokenStream;
     use std::str::FromStr;
+    use tracing_test::traced_test;
 
     trait TokenTestsExt {
         fn as_group(self) -> Group;

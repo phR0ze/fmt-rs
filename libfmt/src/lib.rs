@@ -193,6 +193,20 @@ mod tests {
         );
     }
 
+    #[traced_test]
+    #[test]
+    fn test_comment_trailing_struct() {
+        let source = indoc! {r#"
+            struct Foo; // A struct
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo; // A struct
+            "#},
+        );
+    }
+
     #[test]
     fn test_comment_inline_field() {
         let source = indoc! {r#"
