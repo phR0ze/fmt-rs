@@ -14,7 +14,6 @@ pub(crate) enum CommentKind {
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Comment {
     msg: String,       // The comment message
-    inner: bool,       // Inner or outer comment
     kind: CommentKind, // The comment kind
 }
 
@@ -23,7 +22,6 @@ impl Comment {
     pub(crate) fn new(msg: &str, kind: CommentKind) -> Self {
         Self {
             msg: msg.to_string(),
-            inner: false,
             kind,
         }
     }
@@ -52,19 +50,8 @@ impl Comment {
     pub(crate) fn empty() -> Self {
         Self {
             msg: "".to_string(),
-            inner: false,
             kind: CommentKind::Empty,
         }
-    }
-
-    /// Check if the comment is an inner comment
-    pub(crate) fn is_inner(&self) -> bool {
-        self.inner
-    }
-
-    /// Set the comment as an inner comment
-    pub(crate) fn set_inner(&mut self) {
-        self.inner = true;
     }
 
     /// Return the comment type as an attribute name

@@ -9,6 +9,8 @@ pub(crate) trait TokenExt {
     fn is_comment_group(&self) -> bool;
     fn is_punct(&self, char: char) -> bool;
     fn to_str(&self, span: &Span) -> String;
+    fn span_open(&self) -> Option<Span>;
+    fn span_close(&self) -> Option<Span>;
 }
 
 impl TokenExt for Option<&TokenTree> {
@@ -31,6 +33,12 @@ impl TokenExt for Option<&TokenTree> {
             return token.is_punct(char);
         }
         false
+    }
+    fn span_open(&self) -> Option<Span> {
+        self.and_then(|x| x.span_open())
+    }
+    fn span_close(&self) -> Option<Span> {
+        self.and_then(|x| x.span_close())
     }
     fn to_str(&self, span: &Span) -> String {
         if let Some(token) = self {
@@ -68,6 +76,26 @@ impl TokenExt for TokenTree {
         }
     }
 
+    /// Get the open span
+    fn span_open(&self) -> Option<Span> {
+        Some(match self {
+            TokenTree::Ident(ident) => ident.span(),
+            TokenTree::Literal(literal) => literal.span(),
+            TokenTree::Group(group) => group.span_open(),
+            TokenTree::Punct(punct) => punct.span(),
+        })
+    }
+
+    /// Get the close span
+    fn span_close(&self) -> Option<Span> {
+        Some(match self {
+            TokenTree::Ident(ident) => ident.span(),
+            TokenTree::Literal(literal) => literal.span(),
+            TokenTree::Group(group) => group.span_close(),
+            TokenTree::Punct(punct) => punct.span(),
+        })
+    }
+
     /// Convert the token and span into a string for debugging purposes.  The span is passed in
     /// becasue we don't know in the group case if we are dealing with the open or close span from
     /// this context.
@@ -103,6 +131,44 @@ impl TokenExt for TokenTree {
             }
         }
         out
+    }
+}
+
+/// Newtype to allow for custom implementations
+pub(crate) struct TokenMatrix(Vec<Tokens>);
+
+impl TokenMatrix {
+    pub(crate) fn new() -> Self {
+        TokenMatrix(Vec::new())
+    }
+
+    /// Get the given token at the given index.  This allows for negative indexing
+    pub(crate) fn get(&self, i: isize) -> Option<&Tokens> {
+        if i < 0 {
+            self.0.get(self.0.len().checked_sub(i.abs() as usize)?)
+        } else {
+            self.0.get(i as usize)
+        }
+    }
+
+    /// Is the token stream empty
+    pub(crate) fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    /// Get the last token in the stream
+    pub(crate) fn last(&self) -> Option<&Tokens> {
+        self.0.last()
+    }
+
+    /// Push a new token onto the end of the token stream
+    pub(crate) fn push(&mut self, tokens: Tokens) {
+        self.0.push(tokens);
+    }
+
+    /// Convert the token matrix into a TokenStream
+    pub(crate) fn into_token_stream(self) -> TokenStream {
+        self.0.into_iter().map(|x| x.0).flatten().collect()
     }
 }
 
@@ -314,14 +380,15 @@ impl Tokens {
     ///
     /// * ***tokens***: Token stream to inject the comment into
     /// * ***comment***: Comment to inject
-    pub(crate) fn inject_comment(&mut self, comment: &Comment) {
+    /// * ***inner***: Inject the given comment as an inner comment
+    pub(crate) fn append_comment(&mut self, comment: &Comment, inner: bool) {
         // Spans are an optional feature in proc_macro2 that luckily syn doesn't take into account. This
         // means being unable to set them due to to being private doesn't matter.
         let token: TokenTree = Punct::new('#', Spacing::Alone).into();
         trace!("{}", token.to_str(&token.span()));
         self.push(token);
 
-        if comment.is_inner() {
+        if inner {
             let token: TokenTree = Punct::new('!', Spacing::Alone).into();
             trace!("{}", token.to_str(&token.span()));
             self.push(token);
@@ -478,7 +545,7 @@ mod tests {
             }
         "#});
         let mut group = stream[2].tokens();
-        group.inject_comment(&Comment::line_trailing("trailing"));
+        group.append_comment(&Comment::line_trailing("trailing"), false);
         assert_eq!(group.is_variant(), true);
 
         // Fail
@@ -554,7 +621,7 @@ mod tests {
             }
         "#});
         let mut group = stream[2].tokens();
-        group.inject_comment(&Comment::line_trailing("trailing"));
+        group.append_comment(&Comment::line_trailing("trailing"), false);
         assert_eq!(group.is_field(), true);
 
         // Fail
@@ -579,7 +646,7 @@ mod tests {
         let mut stream = to_tokens(indoc! {r#"
             struct Foo;
         "#});
-        stream.inject_comment(&Comment::line_trailing("trailing"));
+        stream.append_comment(&Comment::line_trailing("trailing"), false);
         assert_eq!(stream.is_statement(), true);
 
         // Fail

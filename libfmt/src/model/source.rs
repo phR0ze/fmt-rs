@@ -78,15 +78,14 @@ impl Source {
         false
     }
 
-    /// Get string from the current position to the given position otherwise return None.
+    /// Get the given range of characters as a string
     /// * Non inclusive of the end position
     /// * If end is past source end then all characters up to the end of the source will be returned
-    pub(crate) fn str<T: Into<Position>>(&self, end: T) -> Option<String> {
-        let end = end.into();
+    pub(crate) fn range<T: Into<Position>>(&self, start: T, end: T) -> Option<String> {
+        let (mut pos, end) = (start.into(), end.into());
 
-        if self.src.len() > 0 && self.pos < self.end && self.pos < end {
+        if self.src.len() > 0 && pos < self.end && pos < end {
             let mut str = String::new();
-            let mut pos = self.pos;
 
             // Not inclusive of the end position
             while pos < self.end && pos < end {
@@ -99,6 +98,13 @@ impl Source {
         } else {
             None
         }
+    }
+
+    /// Get string from the current position to the given position otherwise return None.
+    /// * Non inclusive of the end position
+    /// * If end is past source end then all characters up to the end of the source will be returned
+    pub(crate) fn str<T: Into<Position>>(&self, end: T) -> Option<String> {
+        self.range(self.pos, end.into())
     }
 
     /// Get the end position of the source. End actually refers to one character past the end of
@@ -220,6 +226,11 @@ mod tests {
         assert_eq!(source.contains_newline(pos(0, 6), pos(0, 7)), false);
         assert_eq!(source.contains_newline(pos(0, 6), pos(0, 9)), false);
         assert_eq!(source.contains_newline(pos(1, 0), pos(1, 3)), true);
+
+        assert_eq!(
+            source.contains_newline(Position::default(), Position::max()),
+            true
+        );
     }
 
     #[test]

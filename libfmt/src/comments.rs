@@ -1,9 +1,11 @@
 use crate::{
-    model::{Comment, CommentKind, Config, Position, Source, TokenExt, Tokens},
+    model::{Comment, CommentKind, Config, Position, Source, TokenExt, TokenMatrix, Tokens},
     Error, Result,
 };
-use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
-use std::str::FromStr;
+use proc_macro2::{
+    Delimiter, Group, Ident, LineColumn, Literal, Punct, Spacing, Span, TokenStream, TokenTree,
+};
+use std::{str::FromStr, vec};
 use tracing::trace;
 
 /// Inject missing comments into the token stream.
@@ -35,63 +37,70 @@ pub(crate) fn inject(config: &Config, source: &str) -> Result<TokenStream> {
 /// * ***tokens***: Token stream to inject comments into
 /// * ***prev***: Previous token to take into account for comment injection
 /// * ***return***: Tokenized version of the source with injected comment tokens
-fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTree>) -> Tokens {
-    let mut result = Tokens::new();
+fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTree>) -> TokenMatrix {
+    let mut matrix = TokenMatrix::new();
+    let mut prev_line = Tokens::new();
+    let mut curr_line = Tokens::new();
     let root = prev.is_none();
 
     // If we have no tokens at all we might still have comments
     if root && tokens.is_empty() {
-        inject_comments(source, &mut result, None, None, None);
-        return result;
+        if let Some(comments) = get_comments(source, None, None) {
+            for comment in comments {
+                curr_line.append_comment(&comment, true);
+            }
+        }
+        return matrix;
     }
 
     let mut prev = prev;
     let mut tokens = tokens.into_iter().peekable();
-    while let Some(token) = tokens.next() {
+    while let Some(curr) = tokens.next() {
         let next = tokens.peek();
+        //source.contains_newline(Position::default(), Position::max())
+        let next_start = next.span_open().map(|x| x.start());
 
-        match &token {
+        match &curr {
             TokenTree::Ident(ident) => {
                 let span = ident.span();
-                inject_comments(source, &mut result, Some(&span), prev.as_ref(), next);
-                trace!("{}", token.to_str(&span));
-                result.push(token);
+                get_comments(source, Some(span.end()), next_start);
+                trace!("{}", curr.to_str(&span));
+                //result.push(curr);
             }
             TokenTree::Literal(literal) => {
                 let span = literal.span();
-                inject_comments(source, &mut result, Some(&span), prev.as_ref(), next);
-                trace!("{}", token.to_str(&span));
-                result.push(token);
+                get_comments(source, Some(span.end()), next_start);
+                trace!("{}", curr.to_str(&span));
+                //result.push(curr);
             }
             TokenTree::Group(group) => {
                 // Need to account for the group's opening control character
                 let span = group.span_open();
-                inject_comments(source, &mut result, Some(&span), prev.as_ref(), next);
+                get_comments(source, Some(span.end()), next_start);
 
                 // Recurse on group and update previous token to the last one in the group
-                trace!("{}", token.to_str(&group.span_open()));
-                let mut _tokens = inject_tokens(source, group.stream(), prev.clone());
-                prev = _tokens.last().as_deref().cloned();
+                trace!("{}", curr.to_str(&group.span_open()));
+                let mut matrix = inject_tokens(source, group.stream(), prev.clone());
 
                 // Inject any comments at the end of the group that were not captured
                 let span = group.span_close();
-                inject_comments(source, &mut _tokens, Some(&span), prev.as_ref(), next);
-                trace!("{}", token.to_str(&group.span_close()));
+                get_comments(source, Some(span.end()), next_start);
+                trace!("{}", curr.to_str(&group.span_close()));
 
                 // Construct new group to capture group token stream changes
-                let mut _group = Group::new(group.delimiter(), _tokens.into_token_stream());
+                let mut _group = Group::new(group.delimiter(), matrix.into_token_stream());
                 _group.set_span(group.span());
-                result.push(TokenTree::Group(_group));
+                //result.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
                 let span = punct.span();
-                inject_comments(source, &mut result, Some(&span), prev.as_ref(), next);
-                trace!("{}", token.to_str(&span));
+                get_comments(source, Some(span.end()), next_start);
+                trace!("{}", curr.to_str(&span));
 
                 // proc_macro2 recognizes doc comments and stores them as attributes so we can
                 // simply pass them through without processing.
                 if punct.as_char() == '#' && source.char_at_is(punct.span().start(), '/') {
-                    result.push(token.clone());
+                    // result.push(curr.clone());
                     while tokens
                         .peek()
                         .filter(|x| x.span().start() < punct.span().end())
@@ -99,96 +108,87 @@ fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTre
                     {
                         if let Some(token) = tokens.next() {
                             trace!("{}", token.to_str(&token.span()));
-                            result.push(token);
+                            // result.push(token);
                         }
                     }
                 } else {
-                    result.push(token);
+                    // result.push(curr);
                 }
             }
         }
-        prev = result.last().as_deref().cloned();
     }
 
-    // If the source hasn't been fully processed yet we need to inject any trailing comments
-    if root && source.get_pos() < source.end() {
-        inject_comments(source, &mut result, None, prev.as_ref(), None);
-        return result;
-    }
+    // // If the source hasn't been fully processed yet we need to inject any trailing comments
+    // if root && source.get_pos() < source.end() {
+    //     get_comments(source, None, None);
+    //     return (matrix, result);
+    // }
 
-    result
+    matrix
 }
 
-/// Determine if the given token span has an associated comment and if so store it. In either case
-/// advance the offset to account for the span.
+/// Extract comments from the range of source
 ///
 /// * ***source***: Character matrix of source string
-/// * ***tokens***: Token stream to inject comments into
-/// * ***curr_span***: Current span to process or None if there are no tokens
-/// * ***prev_token***: Previous token to take into account for comment injection
-/// * ***next_token***: Next token to take into account for comment injection
-fn inject_comments(
+/// * ***start***: Start position
+/// * ***end***: End position
+fn get_comments(
     source: &mut Source,
-    tokens: &mut Tokens,
-    curr_span: Option<&Span>,
-    prev_token: Option<&TokenTree>,
-    next_token: Option<&TokenTree>,
-) {
-    let start = curr_span
-        .and_then(|x| Some(Position::from(x.start())))
-        .unwrap_or(Position::max());
-    let end = curr_span
-        .and_then(|x| Some(Position::from(x.end())))
+    start: Option<LineColumn>,
+    end: Option<LineColumn>,
+) -> Option<Vec<Comment>> {
+    let comments: Option<Vec<Comment>> = None;
+
+    let p_start = start
+        .and_then(|x| Some(Position::from(x)))
+        .unwrap_or_default();
+    let p_end = end
+        .and_then(|x| Some(Position::from(x)))
         .unwrap_or(Position::max());
 
     // Comments only potentially exist if there are un-accounted for characters in the source that the
-    // given span is skipping over.
-    if start > source.get_pos() {
-        if let Some(str) = source.str(start) {
-            if !str.is_empty() {
-                // Will be none if there are no comments
-                if let Some(mut comments) = from_str(&str, prev_token.is_some()) {
-                    let no_tokens = tokens.is_empty();
-                    for comment in comments.iter_mut() {
-                        // Only use inner comments when there are no tokens and no current span
-                        if no_tokens && curr_span.is_none() {
-                            comment.set_inner();
-                        }
-                        tokens.inject_comment(comment);
-                    }
+    // given span range is skipping over.
+    if let Some(str) = source.range(p_start, p_end) {
+        if !str.is_empty() {
+            return comments_from_str(&str, start.is_some());
 
-                    // If there is no source token after this we need to inject a placeholder token
-                    // or else the syn package will barf.
-                    if next_token.is_none() {
-                        // Only the first comment can be trailing as anything after would be on a
-                        // newline.
-                        if comments.first().unwrap().is_trailing() {
-                            // println!("{}", tokens.to_str());
-                            if tokens.is_field() {
-                                tokens.inject_dummy_field();
-                            } else if tokens.is_statement() {
-                                tokens.inject_dummy_struct();
-                            } else if tokens.is_variant() {
-                                tokens.inject_dummy_variant();
-                            }
-                        }
-                    }
-                }
-            }
+            // // Will be none if there are no comments
+            // if let Some(mut cmts) = from_str(&str, prev_token.is_some()) {
+            //     let no_tokens = tokens.is_empty();
+            //     for comment in cmts.iter_mut() {
+            //         // Only use inner comments when there are no tokens and no current span
+            //         tokens.append_comment(comment, no_tokens && curr_span.is_none());
+            //     }
+
+            //     // If there is no source token after this we need to inject a placeholder token
+            //     // or else the syn package will barf.
+            //     if next_token.is_none() {
+            //         // Only the first comment can be trailing as anything after would be on a
+            //         // newline.
+            //         if cmts.first().unwrap().is_trailing() {
+            //             // println!("{}", tokens.to_str());
+            //             if tokens.is_field() {
+            //                 tokens.inject_dummy_field();
+            //             } else if tokens.is_statement() {
+            //                 tokens.inject_dummy_struct();
+            //             } else if tokens.is_variant() {
+            //                 tokens.inject_dummy_variant();
+            //             }
+            //         }
+            //     }
+            //     comments = Some(cmts);
+            // }
         }
-    };
-
-    // Update the offset to the end of the token
-    if source.get_pos() < end {
-        source.set_pos(end);
     }
+
+    comments
 }
 
 /// Parse comments from the given string
 ///
 /// * ***text***: Unaccounted for string between source tokens
 /// * ***prev_src***: Indicates source has already been processed
-fn from_str(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
+fn comments_from_str(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
     let mut comments: Vec<Comment> = vec![]; // final results
     let mut line = String::new(); // temp buffer
 
