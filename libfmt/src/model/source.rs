@@ -39,6 +39,13 @@ impl Source {
         }
     }
 
+    /// Get the current position
+    ///
+    /// * return - The current position
+    pub(crate) fn pos(&self) -> Position {
+        self.pos
+    }
+
     /// Get the character at the current position
     pub(crate) fn curr(&self) -> Option<&char> {
         self.get(self.pos)
@@ -67,13 +74,16 @@ impl Source {
     ///
     /// * ***start*** - The start position, inclusive
     /// * ***end*** - The end position inclusive
-    pub(crate) fn contains_newline<T: Into<Position>>(&self, start: T, end: T) -> bool {
-        let (mut pos, end) = (start.into(), end.into());
-        while pos < self.end && pos <= end {
-            if self.get(pos).filter(|x| *x == &'\n').is_some() {
-                return true;
+    pub(crate) fn contains_newline(&self, start: Option<Position>, end: Option<Position>) -> bool {
+        if start.is_some() && end.is_some() {
+            let (start, end) = (start.unwrap(), end.unwrap());
+            let mut pos = start;
+            while pos < self.end && pos <= end {
+                if self.get(pos).filter(|x| *x == &'\n').is_some() {
+                    return true;
+                }
+                pos = self.inc(pos);
             }
-            pos = self.inc(pos);
         }
         false
     }
@@ -111,13 +121,6 @@ impl Source {
     /// of the last line in the source.
     pub(crate) fn end(&self) -> Position {
         self.end
-    }
-
-    /// Get the current position
-    ///
-    /// * return - The current position
-    pub(crate) fn get_pos(&self) -> Position {
-        self.pos
     }
 
     /// Set the current position if it is valid and return true. Invalid positions will not be set
@@ -212,23 +215,29 @@ impl CharExt for Option<&char> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::pos;
     use super::*;
+
+    fn pos(line: usize, column: usize) -> Position {
+        Position::new(line, column)
+    }
+    fn pos2(line: usize, column: usize) -> Option<Position> {
+        pos(line, column).into()
+    }
 
     #[test]
     fn test_contains_newline() {
         let source = Source::new("Hello\nFoo\n");
-        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 1)), false);
-        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 2)), false);
-        assert_eq!(source.contains_newline(pos(0, 0), pos(0, 5)), true);
-        assert_eq!(source.contains_newline(pos(0, 5), pos(0, 6)), true);
-        assert_eq!(source.contains_newline(pos(0, 5), pos(0, 7)), true);
-        assert_eq!(source.contains_newline(pos(0, 6), pos(0, 7)), false);
-        assert_eq!(source.contains_newline(pos(0, 6), pos(0, 9)), false);
-        assert_eq!(source.contains_newline(pos(1, 0), pos(1, 3)), true);
+        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 1)), false);
+        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 2)), false);
+        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 5)), true);
+        assert_eq!(source.contains_newline(pos2(0, 5), pos2(0, 6)), true);
+        assert_eq!(source.contains_newline(pos2(0, 5), pos2(0, 7)), true);
+        assert_eq!(source.contains_newline(pos2(0, 6), pos2(0, 7)), false);
+        assert_eq!(source.contains_newline(pos2(0, 6), pos2(0, 9)), false);
+        assert_eq!(source.contains_newline(pos2(1, 0), pos2(1, 3)), true);
 
         assert_eq!(
-            source.contains_newline(Position::default(), Position::max()),
+            source.contains_newline(Some(Position::default()), Some(Position::max())),
             true
         );
     }
@@ -330,24 +339,24 @@ mod tests {
         let mut source = Source::new("Hello\nFoo\n");
 
         // Exists start
-        assert_eq!(source.get_pos(), pos(0, 0));
+        assert_eq!(source.pos(), pos(0, 0));
 
         assert_eq!(source.set_pos((1, 3)), true);
-        assert_eq!(source.get_pos(), pos(1, 3));
+        assert_eq!(source.pos(), pos(1, 3));
 
         // Allow for end to be set
         assert_eq!(source.set_pos((1, 4)), false);
-        assert_eq!(source.get_pos(), pos(1, 3));
+        assert_eq!(source.pos(), pos(1, 3));
 
         assert_eq!(source.set_pos((3, 4)), false);
-        assert_eq!(source.get_pos(), pos(1, 3));
+        assert_eq!(source.pos(), pos(1, 3));
     }
 
     #[test]
     fn test_pos() {
         let mut source = Source::new("Hello, World!\nThis is a test.\n");
         source.set_pos((1, 1));
-        assert_eq!(source.get_pos(), pos(1, 1));
+        assert_eq!(source.pos(), pos(1, 1));
         assert_eq!(source.curr(), Some(&'h'));
     }
 
@@ -368,8 +377,8 @@ mod tests {
         assert_eq!(source.get((1, 5)), None);
         assert_eq!(source.str((1, 5)), None);
         source.set_pos(pos(1, 1));
-        assert_eq!(source.get_pos(), pos(0, 0));
+        assert_eq!(source.pos(), pos(0, 0));
         source.adv_one();
-        assert_eq!(source.get_pos(), pos(0, 0));
+        assert_eq!(source.pos(), pos(0, 0));
     }
 }

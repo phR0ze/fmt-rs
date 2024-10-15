@@ -7,7 +7,7 @@ mod print_frame;
 mod ring;
 mod scan;
 mod source;
-mod token;
+mod tokens;
 
 pub(crate) use begin_token::*;
 pub(crate) use break_token::*;
@@ -18,4 +18,4 @@ pub(crate) use print_frame::*;
 pub(crate) use ring::*;
 pub(crate) use scan::*;
 pub(crate) use source::*;
-pub(crate) use token::*;
+pub(crate) use tokens::*;

@@ -1,10 +1,5 @@
 use proc_macro2::LineColumn;
 
-/// Convenience function for creating a new Position
-pub(crate) fn pos(line: usize, column: usize) -> Position {
-    Position::new(line, column)
-}
-
 /// Position in the source code.
 /// Position is zero indexed meaning 0,0 is the first character in the source code.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -81,6 +76,10 @@ impl std::fmt::Display for Position {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn pos(line: usize, column: usize) -> Position {
+        Position::new(line, column)
+    }
 
     #[test]
     fn test_subtract_usize() {

@@ -1,5 +1,6 @@
 use super::{Comment, Position, Source};
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
+use std::{collections::VecDeque, iter::Fuse, ops::Mul};
 use syn::token::Token;
 use tracing::trace;
 
@@ -194,6 +195,11 @@ impl Tokens {
         self.0.is_empty()
     }
 
+    /// Insert the given token
+    pub(crate) fn insert(&mut self, token: TokenTree) {
+        self.0.insert(0, token);
+    }
+
     /// Get the last token in the stream
     pub(crate) fn last(&self) -> Option<&TokenTree> {
         self.0.last()
@@ -373,25 +379,46 @@ impl Tokens {
         self.push(token);
     }
 
-    /// Translate the comment into inner doc tokens which follows proc_macro2 precedence of storing doc
+    /// Append the comment to the token stream.
+    ///
+    /// * ***comment***: Comment to inject
+    /// * ***inner***: Inject the given comment as an inner comment
+    pub(crate) fn append_comment(&mut self, comment: &Comment, inner: bool) {
+        for token in self.create_comment(comment, inner) {
+            self.push(token);
+        }
+    }
+
+    /// Prepend the comment to the token stream.
+    ///
+    /// * ***comment***: Comment to inject
+    /// * ***inner***: Inject the given comment as an inner comment
+    pub(crate) fn prepend_comment(&mut self, comment: &Comment, inner: bool) {
+        for token in self.create_comment(comment, inner).into_iter().rev() {
+            self.insert(token);
+        }
+    }
+
+    /// Translate the comment into doc tokens which follows proc_macro2 precedence of storing doc
     /// comments as attributes. We are just leveraging this pattern to trick syn into passing through
     /// regular comments as inner doc comments which can be allowed anywhere. It abuses the system
     /// slightly but we'll strip them back out later during scaning.
     ///
-    /// * ***tokens***: Token stream to inject the comment into
     /// * ***comment***: Comment to inject
     /// * ***inner***: Inject the given comment as an inner comment
-    pub(crate) fn append_comment(&mut self, comment: &Comment, inner: bool) {
+    fn create_comment(&self, comment: &Comment, inner: bool) -> Vec<TokenTree> {
+        let mut tokens: Vec<TokenTree> = vec![];
+
         // Spans are an optional feature in proc_macro2 that luckily syn doesn't take into account. This
         // means being unable to set them due to to being private doesn't matter.
         let token: TokenTree = Punct::new('#', Spacing::Alone).into();
         trace!("{}", token.to_str(&token.span()));
-        self.push(token);
+        tokens.push(token);
 
         if inner {
             let token: TokenTree = Punct::new('!', Spacing::Alone).into();
             trace!("{}", token.to_str(&token.span()));
-            self.push(token);
+            tokens.push(token);
         }
 
         // Create and log new comment group
@@ -411,7 +438,7 @@ impl Tokens {
         trace!("  {}", token.to_str(&token.span()));
         stream.push(token);
 
-        self.push(
+        tokens.push(
             Group::new(
                 Delimiter::Bracket,
                 TokenStream::from_iter::<Vec<TokenTree>>(stream),
@@ -420,6 +447,8 @@ impl Tokens {
         );
 
         trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "]");
+
+        tokens
     }
 
     /// Convert the token stream into a string for debugging purposes
@@ -469,6 +498,47 @@ impl Into<Vec<TokenTree>> for Tokens {
     }
 }
 
+/// Newtype to allow for custom TokenStream manipulation
+pub(crate) struct TokenStreamExt(TokenStream);
+
+/// Provide multiple peeking capabilities to an iterator
+#[derive(Clone, Debug)]
+pub struct MultiPeek<I>
+where
+    I: Iterator<Item = TokenTree>,
+{
+    src: Fuse<I>,           // source iterator
+    buf: VecDeque<I::Item>, // buffer of items
+}
+impl<I> MultiPeek<I>
+where
+    I: Iterator<Item = TokenTree>,
+{
+    /// Provide multiple peeking capabilities to an iterator with `peek()`.
+    ///
+    /// * ***iterable*** - The iterator to peek into
+    pub fn new(iterable: I) -> Self {
+        MultiPeek {
+            src: iterable.into_iter().fuse(),
+            buf: VecDeque::new(),
+        }
+    }
+
+    /// Get the next three tokens in the iterator
+    fn next(&mut self) -> (Option<&I::Item>, Option<&I::Item>, Option<&I::Item>) {
+        self.buf.clear();
+
+        for _ in 0..3 {
+            if let Some(x) = self.src.next() {
+                self.buf.push_back(x);
+            }
+        }
+
+        // Return the next three tokens
+        (self.buf.get(0), self.buf.get(1), self.buf.get(2))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -496,6 +566,43 @@ mod tests {
             .into_iter()
             .collect::<Vec<TokenTree>>()
             .into()
+    }
+
+    #[test]
+    fn test_tokens_next() {
+        // None
+        let stream = to_tokens(indoc! {r#" "#});
+        let mut tokens = MultiPeek::new(stream.0.into_iter());
+        let (next0, next1, next2) = tokens.next();
+
+        assert_eq!(next0.is_none(), true);
+        assert_eq!(next1.is_none(), true);
+        assert_eq!(next2.is_none(), true);
+
+        // Partial tokens
+        let stream = to_tokens(indoc! {r#"
+            enum Foo
+        "#});
+        let mut tokens = MultiPeek::new(stream.0.into_iter());
+        let (next0, next1, next2) = tokens.next();
+
+        assert_eq!(next0.unwrap().to_string(), "enum".to_string());
+        assert_eq!(next1.unwrap().to_string(), "Foo".to_string());
+        assert_eq!(next2.is_none(), true);
+
+        // Full three tokens
+        let stream = to_tokens(indoc! {r#"
+            enum Foo {
+                A(String),
+                B((&'a i32, i32)),
+            }
+        "#});
+        let mut tokens = MultiPeek::new(stream.0.into_iter());
+        let (next0, next1, next2) = tokens.next();
+
+        assert_eq!(next0.unwrap().to_string(), "enum".to_string());
+        assert_eq!(next1.unwrap().to_string(), "Foo".to_string());
+        assert_eq!(next2.unwrap().to_string().starts_with("{"), true);
     }
 
     #[test]

@@ -27,80 +27,111 @@ pub(crate) fn inject(config: &Config, source: &str) -> Result<TokenStream> {
     // Only inject comments if they are enabled
     Ok(match config.no_comments() {
         true => tokens,
-        _ => inject_tokens(&mut Source::new(source), tokens, None).into_token_stream(),
+        _ => inject_tokens(&mut Source::new(source), tokens).into_token_stream(),
     })
 }
 
 /// Recursively inject tokens as needed to include missing comments
 ///
 /// * ***source***: Source character matrix
-/// * ***tokens***: Token stream to inject comments into
-/// * ***prev***: Previous token to take into account for comment injection
+/// * ***stream***: Token stream to inject comments into
 /// * ***return***: Tokenized version of the source with injected comment tokens
-fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTree>) -> TokenMatrix {
+fn inject_tokens(source: &mut Source, stream: TokenStream) -> TokenMatrix {
     let mut matrix = TokenMatrix::new();
-    let mut prev_line = Tokens::new();
     let mut curr_line = Tokens::new();
-    let root = prev.is_none();
+    let mut next_line = Tokens::new();
 
-    // If we have no tokens at all we might still have comments
-    if root && tokens.is_empty() {
-        if let Some(comments) = get_comments(source, None, None) {
-            for comment in comments {
-                curr_line.append_comment(&comment, true);
-            }
-        }
+    // Process comments only case
+    if stream.is_empty() {
+        inject_comments(source, &mut curr_line, None, None, None);
         return matrix;
     }
 
-    let mut prev = prev;
-    let mut tokens = tokens.into_iter().peekable();
+    // Process comments between tokens
+    let mut tokens = stream.into_iter().peekable();
     while let Some(curr) = tokens.next() {
         let next = tokens.peek();
-        //source.contains_newline(Position::default(), Position::max())
-        let next_start = next.span_open().map(|x| x.start());
+        let curr_end = curr.span_open().map(|x| x.end().into());
+        let next_start = next.span_open().map(|x| x.start().into());
+
+        // Handle leading comments i.e. haven't processed any tokens yet
+        if curr_line.is_empty() {
+            // TODO: need to look ahead to parse curr.end - next.start for trailing comment for curr
+            let curr_start = curr.span_open().map(|x| x.start().into());
+            inject_comments(source, &mut curr_line, None, Some(source.pos()), curr_start);
+        }
 
         match &curr {
             TokenTree::Ident(ident) => {
                 let span = ident.span();
-                get_comments(source, Some(span.end()), next_start);
+                inject_comments(
+                    source,
+                    &mut curr_line,
+                    Some(&mut next_line),
+                    Some(span.end().into()),
+                    next_start,
+                );
                 trace!("{}", curr.to_str(&span));
-                //result.push(curr);
+                curr_line.push(curr);
             }
             TokenTree::Literal(literal) => {
                 let span = literal.span();
-                get_comments(source, Some(span.end()), next_start);
+                inject_comments(
+                    source,
+                    &mut curr_line,
+                    Some(&mut next_line),
+                    Some(span.end().into()),
+                    next_start,
+                );
                 trace!("{}", curr.to_str(&span));
-                //result.push(curr);
+                curr_line.push(curr);
             }
             TokenTree::Group(group) => {
                 // Need to account for the group's opening control character
                 let span = group.span_open();
-                get_comments(source, Some(span.end()), next_start);
+                inject_comments(
+                    source,
+                    &mut curr_line,
+                    Some(&mut next_line),
+                    Some(span.end().into()),
+                    next_start,
+                );
 
                 // Recurse on group and update previous token to the last one in the group
                 trace!("{}", curr.to_str(&group.span_open()));
-                let mut matrix = inject_tokens(source, group.stream(), prev.clone());
+                let matrix = inject_tokens(source, group.stream());
 
                 // Inject any comments at the end of the group that were not captured
                 let span = group.span_close();
-                get_comments(source, Some(span.end()), next_start);
+                inject_comments(
+                    source,
+                    &mut curr_line,
+                    Some(&mut next_line),
+                    Some(span.end().into()),
+                    next_start,
+                );
                 trace!("{}", curr.to_str(&group.span_close()));
 
                 // Construct new group to capture group token stream changes
                 let mut _group = Group::new(group.delimiter(), matrix.into_token_stream());
                 _group.set_span(group.span());
-                //result.push(TokenTree::Group(_group));
+                curr_line.push(TokenTree::Group(_group));
             }
             TokenTree::Punct(punct) => {
                 let span = punct.span();
-                get_comments(source, Some(span.end()), next_start);
+                inject_comments(
+                    source,
+                    &mut curr_line,
+                    Some(&mut next_line),
+                    Some(span.end().into()),
+                    next_start,
+                );
                 trace!("{}", curr.to_str(&span));
 
                 // proc_macro2 recognizes doc comments and stores them as attributes so we can
                 // simply pass them through without processing.
                 if punct.as_char() == '#' && source.char_at_is(punct.span().start(), '/') {
-                    // result.push(curr.clone());
+                    curr_line.push(curr.clone());
                     while tokens
                         .peek()
                         .filter(|x| x.span().start() < punct.span().end())
@@ -108,13 +139,24 @@ fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTre
                     {
                         if let Some(token) = tokens.next() {
                             trace!("{}", token.to_str(&token.span()));
-                            // result.push(token);
+                            curr_line.push(token);
                         }
                     }
                 } else {
-                    // result.push(curr);
+                    curr_line.push(curr);
                 }
             }
+        }
+
+        // Store and reset curr token line
+        if source.contains_newline(curr_end, next_start) {
+            // TODO what if there is no next token
+            // Track the process portion of the source
+            if let Some(start) = next_start {
+                source.set_pos(start);
+            }
+            matrix.push(curr_line);
+            curr_line = Tokens::new();
         }
     }
 
@@ -130,28 +172,39 @@ fn inject_tokens(source: &mut Source, tokens: TokenStream, prev: Option<TokenTre
 /// Extract comments from the range of source
 ///
 /// * ***source***: Character matrix of source string
+/// * ***curr***: Current token line
+/// * ***next***: Next token line
 /// * ***start***: Start position
 /// * ***end***: End position
-fn get_comments(
+fn inject_comments(
     source: &mut Source,
-    start: Option<LineColumn>,
-    end: Option<LineColumn>,
-) -> Option<Vec<Comment>> {
-    let comments: Option<Vec<Comment>> = None;
-
-    let p_start = start
-        .and_then(|x| Some(Position::from(x)))
-        .unwrap_or_default();
-    let p_end = end
-        .and_then(|x| Some(Position::from(x)))
-        .unwrap_or(Position::max());
+    curr: &mut Tokens,
+    next: Option<&mut Tokens>,
+    start: Option<Position>,
+    end: Option<Position>,
+) {
+    let start = start.unwrap_or_default();
+    let end = end.unwrap_or(Position::max());
 
     // Comments only potentially exist if there are un-accounted for characters in the source that the
     // given span range is skipping over.
-    if let Some(str) = source.range(p_start, p_end) {
+    if let Some(str) = source.range(start, end) {
         if !str.is_empty() {
-            return comments_from_str(&str, start.is_some());
-
+            if let Some(comments) = parse_comments(&str, start != Position::default()) {
+                // If next is given then all comments should go there except trailing which go to current
+                if let Some(next) = next {
+                    for comment in comments.iter().filter(|x| x.is_trailing()) {
+                        curr.prepend_comment(&comment, false);
+                    }
+                    for comment in comments.iter().filter(|x| !x.is_trailing()) {
+                        next.append_comment(&comment, false);
+                    }
+                } else {
+                    for comment in comments {
+                        curr.append_comment(&comment, false);
+                    }
+                }
+            }
             // // Will be none if there are no comments
             // if let Some(mut cmts) = from_str(&str, prev_token.is_some()) {
             //     let no_tokens = tokens.is_empty();
@@ -180,15 +233,13 @@ fn get_comments(
             // }
         }
     }
-
-    comments
 }
 
 /// Parse comments from the given string
 ///
 /// * ***text***: Unaccounted for string between source tokens
 /// * ***prev_src***: Indicates source has already been processed
-fn comments_from_str(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
+fn parse_comments(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
     let mut comments: Vec<Comment> = vec![]; // final results
     let mut line = String::new(); // temp buffer
 
@@ -330,13 +381,16 @@ fn comments_from_str(str: &str, prev_src: bool) -> Option<Vec<Comment>> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::pos;
     use core::panic;
     use indoc::indoc;
     use itertools::{peek_nth, PeekNth};
     use proc_macro2::TokenStream;
     use std::str::FromStr;
     use tracing_test::traced_test;
+
+    fn pos(line: usize, column: usize) -> Position {
+        Position::new(line, column)
+    }
 
     trait TokenTestsExt {
         fn as_group(self) -> Group;
@@ -512,6 +566,7 @@ mod tests {
         }
     }
 
+    #[traced_test]
     #[test]
     fn test_trailing_variant() {
         let source = indoc! {r#"
