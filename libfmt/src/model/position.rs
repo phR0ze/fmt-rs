@@ -74,6 +74,11 @@ impl std::fmt::Display for Position {
 }
 
 #[cfg(test)]
+pub(crate) fn pos(line: usize, column: usize) -> Position {
+    Position::new(line, column)
+}
+
+#[cfg(test)]
 mod tests {
     use super::*;
 

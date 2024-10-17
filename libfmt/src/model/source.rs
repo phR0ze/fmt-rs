@@ -91,8 +91,9 @@ impl Source {
     /// Get the given range of characters as a string
     /// * Non inclusive of the end position
     /// * If end is past source end then all characters up to the end of the source will be returned
-    pub(crate) fn range<T: Into<Position>>(&self, start: T, end: T) -> Option<String> {
-        let (mut pos, end) = (start.into(), end.into());
+    pub(crate) fn range(&self, start: Option<Position>, end: Option<Position>) -> Option<String> {
+        let mut pos = start.unwrap_or_default();
+        let end = end.unwrap_or(Position::max());
 
         if self.src.len() > 0 && pos < self.end && pos < end {
             let mut str = String::new();
@@ -114,7 +115,7 @@ impl Source {
     /// * Non inclusive of the end position
     /// * If end is past source end then all characters up to the end of the source will be returned
     pub(crate) fn str<T: Into<Position>>(&self, end: T) -> Option<String> {
-        self.range(self.pos, end.into())
+        self.range(Some(self.pos), Some(end.into()))
     }
 
     /// Get the end position of the source. End actually refers to one character past the end of
@@ -192,6 +193,13 @@ impl Source {
         }
 
         self.end
+    }
+}
+
+/// Implement from string for source
+impl From<&str> for Source {
+    fn from(source: &str) -> Self {
+        Source::new(source)
     }
 }
 
