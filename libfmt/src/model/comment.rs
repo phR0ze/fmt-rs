@@ -67,6 +67,11 @@ impl Comment {
         }
     }
 
+    /// Check if the comment is a regular comment i.e. not trailing or break
+    pub(crate) fn is_regular(&self) -> bool {
+        !self.is_break() && !self.is_trailing()
+    }
+
     /// Check if the comment is a code break
     pub(crate) fn is_break(&self) -> bool {
         match self {

@@ -1,3 +1,4 @@
+#[derive(Debug, Clone)]
 pub struct Config {
     pub(crate) indent: isize,                          // 4?
     pub(crate) margin: isize,                          // 89?

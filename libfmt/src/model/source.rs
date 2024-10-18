@@ -5,6 +5,7 @@ use super::Position;
 ///
 /// * `Vec<Vec<char>>` - A 2D vector of characters representing the source code
 /// * `Position` - Tracking for our current position in the source code
+#[derive(Debug)]
 pub(crate) struct Source {
     src: Vec<Vec<char>>,
     pos: Position,

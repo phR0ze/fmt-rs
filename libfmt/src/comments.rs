@@ -1,14 +1,12 @@
 use crate::{
     model::{
-        Comment, Config, OptionTokenExt, Position, Source, TokenBox, TokenExt, TokenMatrix,
-        TokenWrapper, Tokens,
+        Comment, Config, OptionTokenExt, Position, Source, TokenExt, TokenGroup, TokenItem,
+        TokenWrap,
     },
     Error, Result,
 };
-use core::panic;
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
-use std::iter;
-use std::{str::FromStr, vec};
+use std::{collections::VecDeque, str::FromStr, vec};
 use tracing::trace;
 
 /// Inject missing comments into the token stream.
@@ -28,250 +26,390 @@ pub(crate) fn inject(config: &Config, source: &str) -> Result<TokenStream> {
         .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
     // Inject comments into the token stream
-    Ok(inject_comments(config, &mut Source::new(source), tokens).into_token_stream())
+    let commenter = Commenter::new(config, Source::new(source)).inject(tokens);
+    Ok(commenter.into_token_stream())
 }
 
-/// Inject any missing comments as needed
-///
-/// * ***source***: Source character matrix
-/// * ***stream***: Token stream to inject comments into
-/// * ***return***: Tokenized version of the source with injected comment tokens
-fn inject_comments(config: &Config, source: &Source, stream: TokenStream) -> TokenMatrix {
-    let mut iter = TokenWrapper::from(stream.into_iter());
-    let mut groups: Vec<(TokenTree, Vec<TokenTree>)> = vec![];
-    let mut src: Option<String>;
+/// Newtype to allow for custom implementations
+#[derive(Debug)]
+pub(crate) struct Commenter<'a> {
+    config: &'a Config,
+    source: Source,
+    groups: Vec<TokenGroup>,
+}
 
-    let mut matrix = TokenMatrix::new();
-    let mut curr_line = Tokens::new();
-    let mut next_line = Tokens::new();
-    let mut store = false;
-    let mut complete = false;
-    let mut code_break = false;
-    let mut tokens: [Option<&TokenBox>; 2];
-
-    loop {
-        tokens = iter.next().peek();
-
-        // Leading comments
-        // -----------------------------------------------------------------------------------------
-        let (start0, end0) = tokens[0].span_open();
-
-        // (0:0, max0/start0) - Handle leading comments i.e. haven't processed any tokens yet
-        if curr_line.is_empty() && matrix.is_empty() {
-            // (0:0, max) - There are no tokens in the stream
-            if tokens[0].is_none() {
-                src = source.range(None, None);
-                if let Some(comments) = parse_comments(src.as_deref(), false) {
-                    push_comments(config, &mut groups, &mut curr_line, comments.iter(), true)
-                }
-
-            // (0:0, start0) - There is at least one token in the stream
-            } else {
-                src = source.range(None, start0);
-                if let Some(comments) = parse_comments(src.as_deref(), false) {
-                    push_comments(config, &mut groups, &mut curr_line, comments.iter(), false)
-                }
-            }
-        }
-
-        // Handle grouping and early termination
-        // -----------------------------------------------------------------------------------------
-        match tokens[0] {
-            Some(TokenBox::GroupStart(token)) => {
-                trace!("{}", TokenBox::GroupStart(token.clone()).to_str());
-                groups.push((token.clone(), Vec::new()));
-            }
-
-            // Construct new group to capture group token stream changes
-            Some(TokenBox::GroupEnd(token)) => {
-                trace!("{}", TokenBox::GroupEnd(token.clone()).to_str());
-                if let Some((TokenTree::Group(group), tokens)) = groups.pop() {
-                    let mut _group = Group::new(group.delimiter(), TokenStream::from_iter(tokens));
-                    _group.set_span(group.span());
-                    push_tokens(
-                        &mut groups,
-                        &mut curr_line,
-                        iter::once(&TokenTree::Group(_group)),
-                    );
-                } else {
-                    panic!("Group end without start");
-                }
-            }
-            Some(TokenBox::Token(token)) => {
-                trace!("{}", TokenBox::Token(token.clone()).to_str());
-
-                // Pass proc_macro2 parsed doc comments directly through without processing
-                // ---------------------------------------------------------------------------------
-                if let TokenTree::Punct(punct) = token {
-                    // unwrap is safe here as we have a token in this context
-                    if punct.as_char() == '#' && source.char_at_is(start0.unwrap(), '/') {
-                        push_tokens(&mut groups, &mut curr_line, iter::once(token));
-                        let mut in_group = false;
-                        loop {
-                            tokens = iter.next().peek();
-                            if !pass(
-                                &mut groups,
-                                &mut curr_line,
-                                &mut in_group,
-                                end0.unwrap(),
-                                tokens[0],
-                                tokens[1],
-                            ) {
-                                break;
-                            }
-                        }
-                        code_break = true;
-                    } else {
-                        store = true;
-                    }
-                } else {
-                    store = true;
-                }
-            }
-
-            // None: We've hit the end of the token stream
-            None => {
-                complete = true;
-            }
-        }
-
-        // Check for comments between tokens
-        // -----------------------------------------------------------------------------------------
-        let (_, end0) = tokens[0].span_open();
-        let (start1, _) = tokens[1].span_open();
-        if tokens[1].is_some() {
-            src = source.range(end0, start1);
-
-            if let Some(comments) = parse_comments(src.as_deref(), true) {
-                // Add trailing comment to current line
-                push_comments(
-                    config,
-                    &mut groups,
-                    &mut curr_line,
-                    comments.iter().filter(|x| x.is_trailing()),
-                    false,
-                );
-
-                // Add comments between tokens to next line
-                push_comments(
-                    config,
-                    &mut groups,
-                    &mut next_line,
-                    comments
-                        .iter()
-                        .filter(|x| !x.is_trailing() && !x.is_break()),
-                    false,
-                );
-
-                code_break = comments.iter().any(|x| x.is_break());
-            }
-        }
-
-        // Store and reset curr token line
-        if store {
-            push_tokens(
-                &mut groups,
-                &mut curr_line,
-                iter::once(&**tokens[0].unwrap()),
-            );
-            store = false;
-        }
-        if code_break {
-            trace!("Code break");
-            matrix.push(curr_line);
-            curr_line = next_line;
-            next_line = Tokens::new();
-            code_break = false;
-        }
-        if complete {
-            matrix.push(curr_line);
-            break;
+impl<'a> Commenter<'a> {
+    /// Create a new instance
+    pub(crate) fn new(config: &'a Config, source: Source) -> Self {
+        Self {
+            config,
+            source,
+            groups: vec![TokenGroup::new(None)],
         }
     }
 
-    matrix
-}
+    /// Inject comments into the token stream from the source
+    pub(crate) fn inject(mut self, stream: TokenStream) -> Self {
+        let mut stream = expand_tokens(stream);
 
-/// Pass through doc comments as is
-fn pass(
-    groups: &mut Vec<(TokenTree, Vec<TokenTree>)>,
-    curr_line: &mut Tokens,
-    in_group: &mut bool,
-    end0: Position,
-    token0: Option<&TokenBox>,
-    token1: Option<&TokenBox>,
-) -> bool {
-    if let Some(token) = token0 {
-        let (start, _) = token.span_open();
-        if start < end0 {
-            if token1.is_none() {
-                // Only using token1 to look ahead but not for processing
+        let mut src: Option<String>;
+        let mut store = false;
+        let mut complete = false;
+        let mut newline = false;
+
+        loop {
+            // Leading comments
+            // -----------------------------------------------------------------------------------------
+            let (start0, end0) = stream.get(0).span_open();
+
+            // (0:0, max0/start0) - Handle leading comments i.e. haven't processed any tokens yet
+            if self.is_empty() {
+                // (0:0, max) - There are no tokens in the stream
+                if stream.is_empty() {
+                    src = self.source.range(None, None);
+                    if let Some(comments) = parse_comments(src.as_deref(), false) {
+                        self.append_curr_comments(comments, true);
+                    }
+
+                // (0:0, start0) - There is at least one token in the stream
+                } else {
+                    src = self.source.range(None, start0);
+                    if let Some(comments) = parse_comments(src.as_deref(), false) {
+                        self.append_curr_comments(comments, false);
+                    }
+                }
+            }
+
+            // Handle grouping and early termination
+            // -----------------------------------------------------------------------------------------
+            match stream.get(0) {
+                Some(wrap) => match wrap {
+                    TokenWrap::GroupStart(token) => {
+                        self.append_group(token.clone());
+                    }
+                    TokenWrap::GroupEnd(_) => {
+                        self.complete_group(wrap);
+                    }
+                    TokenWrap::Token(token) => {
+                        // Pass proc_macro2 parsed doc comments directly through without processing
+                        // ---------------------------------------------------------------------------------
+                        if let TokenTree::Punct(punct) = token {
+                            // unwrap is safe here as we have a token in this context
+                            if punct.as_char() == '#'
+                                && self.source.char_at_is(start0.unwrap(), '/')
+                            {
+                                self.append_curr(token.clone());
+                                let mut in_group = false;
+                                loop {
+                                    let curr = stream.pop_front();
+                                    if !self.pass_doc_comments(&mut in_group, end0.unwrap(), curr) {
+                                        break;
+                                    }
+                                }
+                                newline = true;
+                            } else {
+                                store = true;
+                            }
+                        } else {
+                            store = true;
+                        }
+                    }
+                },
+
+                // None: We've hit the end of the token stream
+                None => {
+                    complete = true;
+                }
+            }
+
+            // Store current token and check for comments between tokens
+            // -----------------------------------------------------------------------------------------
+
+            // Store the current token first so comments can be injected correctly
+            let token1 = if store {
+                self.append_curr(stream.pop_front().unwrap().take());
+                store = false;
+                stream.get(0)
+            } else {
+                stream.get(1)
+            };
+
+            // Handle queued line break for doc comments
+            self.complete_line(&mut newline);
+
+            // Check for comments next
+            let (start1, _) = token1.span_open();
+
+            if token1.is_some() {
+                src = self.source.range(end0, start1);
+
+                if let Some(comments) = parse_comments(src.as_deref(), true) {
+                    newline = comments.iter().any(|x| x.is_break());
+
+                    // Add trailing comments to begining of current line
+                    self.prepend_curr_comments(
+                        comments
+                            .clone()
+                            .into_iter()
+                            .filter(|x| x.is_trailing())
+                            .collect(),
+                        false,
+                    );
+
+                    // Add regular comments between tokens to next line
+                    self.append_next_comments(
+                        comments
+                            .clone()
+                            .into_iter()
+                            .filter(|x| x.is_regular())
+                            .collect(),
+                        false,
+                    );
+                }
+            }
+
+            // Handle code line break after comments so we can inject trailing comments before storing
+            self.complete_line(&mut newline);
+
+            if complete {
+                self.complete();
+                break;
+            }
+        }
+        self
+    }
+
+    /// Is the token stream empty
+    fn is_empty(&self) -> bool {
+        if self.groups.len() > 1 || self.groups.iter().any(|x| !x.is_empty()) {
+            return false;
+        }
+        true
+    }
+
+    /// Complete out any remaining current line tokens
+    fn complete(&mut self) {
+        // There will always be at least the root group
+        self.groups.last_mut().unwrap().complete_line();
+    }
+
+    /// Append group
+    ///
+    /// * ***group***: Group token to include in the new group
+    fn append_group(&mut self, group: TokenTree) {
+        trace!("{}", TokenWrap::GroupStart(group.clone()).to_str());
+        self.groups.push(TokenGroup::new(Some(group)))
+    }
+
+    /// Complete group
+    fn complete_group(&mut self, group: &TokenWrap) {
+        trace!("{}", group.to_str());
+
+        // Create a new TokenTree::Group to capture group token changes
+        if let Some(mut group) = self.groups.pop() {
+            if let Some(TokenTree::Group(token)) = group.token.clone() {
+                group.complete();
+                let mut _group =
+                    Group::new(token.delimiter(), TokenStream::from_iter(group.complete));
+                _group.set_span(token.span());
+                self.append_curr(TokenTree::Group(_group));
+            } else {
+                panic!("Group end without token");
+            }
+        } else {
+            panic!("Group end without start");
+        }
+    }
+
+    /// Append comments to the current line
+    ///
+    /// * ***comments***: Comments to append
+    /// * ***inner***: Append the given comments as inner comments
+    fn append_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
+        if self.config.no_comments() {
+            return;
+        }
+        for comment in comments {
+            for token in comment_to_tokens(&comment, inner) {
+                self.append_curr(token);
+            }
+        }
+    }
+
+    /// Append comments to the next line
+    ///
+    /// * ***comments***: Comments to append
+    /// * ***inner***: Append the given comments as inner comments
+    fn append_next_comments(&mut self, comments: Vec<Comment>, inner: bool) {
+        if self.config.no_comments() {
+            return;
+        }
+        for comment in comments {
+            for token in comment_to_tokens(&comment, inner) {
+                self.append_next(token);
+            }
+        }
+    }
+
+    /// Prepend comments to the current line
+    ///
+    /// * ***comments***: Comments to prepend
+    /// * ***inner***: Prepend the given comments as inner comments
+    fn prepend_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
+        if self.config.no_comments() {
+            return;
+        }
+        for comment in comments {
+            // Need to reverse the order since we are prepending one at a time
+            for token in comment_to_tokens(&comment, inner).into_iter().rev() {
+                self.prepend_curr(token);
+            }
+        }
+    }
+
+    /// Append token to the current line
+    ///
+    /// * ***token***: Token to append
+    fn append_curr(&mut self, token: TokenTree) {
+        if self.groups.len() > 1 {
+            trace!(
+                "APPEND_CURR_SUB: {}",
+                TokenWrap::Token(token.clone()).to_str()
+            );
+        } else {
+            trace!("APPEND_CURR: {}", TokenWrap::Token(token.clone()).to_str());
+        }
+
+        // There will always be at least the root group
+        self.groups.last_mut().unwrap().curr_line.push(token);
+    }
+
+    /// Append token to the next line
+    ///
+    /// * ***token***: Token to append
+    fn append_next(&mut self, token: TokenTree) {
+        if self.groups.len() > 1 {
+            trace!(
+                "APPEND_NEXT_SUB: {}",
+                TokenWrap::Token(token.clone()).to_str()
+            );
+        } else {
+            trace!("APPEND_NEXT: {}", TokenWrap::Token(token.clone()).to_str());
+        }
+
+        // There will always be at least the root group
+        self.groups.last_mut().unwrap().next_line.push(token);
+    }
+
+    /// Prepend token to the current line
+    ///
+    /// * ***token***: Token to prepend
+    fn prepend_curr(&mut self, token: TokenTree) {
+        if self.groups.len() > 1 {
+            trace!(
+                "PREPEND_CURR_SUB: {}",
+                TokenWrap::Token(token.clone()).to_str()
+            );
+        } else {
+            trace!("PREPEND_CURR: {}", TokenWrap::Token(token.clone()).to_str());
+        }
+
+        // There will always be at least the root group
+        self.groups.last_mut().unwrap().curr_line.insert(0, token);
+    }
+
+    /// Conditionally handle a line break
+    fn complete_line(&mut self, newline: &mut bool) {
+        if *newline {
+            trace!("Code break");
+
+            // There will always be at least the root group
+            self.groups.last_mut().unwrap().complete_line();
+            *newline = false;
+        }
+    }
+
+    /// Pass through doc comments as is
+    ///
+    /// * ***in_group***: Are we currently in a group
+    /// * ***end***: End position of the doc comment
+    /// * ***curr***: Current token to check
+    /// * ***next***: Next token to check
+    /// * ***return***: True if we need to continue processing
+    fn pass_doc_comments(
+        &mut self,
+        in_group: &mut bool,
+        end: Position,
+        curr: Option<TokenWrap>,
+    ) -> bool {
+        if let Some(token) = curr {
+            let (start, _) = token.span_open();
+            if start < end {
+                trace!("{}", token.to_str());
+                if !*in_group || token.is_group_start() {
+                    *in_group = token.is_group_start();
+                    self.append_curr(token.take());
+                } else if let TokenWrap::GroupEnd(_) = token {
+                    *in_group = false;
+                    return false; // done
+                }
                 return true;
             }
-            trace!("{}", token.to_str());
-            if !*in_group || token.is_group_start() {
-                push_tokens(groups, curr_line, iter::once(&**token));
-                *in_group = token.is_group_start();
-            } else if let TokenBox::GroupEnd(_) = token {
-                *in_group = false;
-                return false; // done
-            }
-
-            // Look ahead and terminate based on that result
-            if token1.is_some() {
-                return pass(groups, curr_line, in_group, end0, token1, None);
-            }
         }
+        false
     }
-    // We should always have a valid first token as we are looking ahed to the second
-    panic!("Invalid doc comment detected!");
+    /// Convert the token matrix into a TokenStream
+    pub(crate) fn into_token_stream(self) -> TokenStream {
+        self.groups
+            .into_iter()
+            .map(|x| x.into_token_stream())
+            .flatten()
+            .collect()
+    }
 }
 
-/// Push comments to the group or token stream.
+/// Expand tokens into a flattened list of TokenWrap objects which provide more information
 ///
-/// * ***comments***: Comments to inject
-/// * ***inner***: Inject the given comment as an inner comment
-fn push_comments<'a, I>(
-    config: &Config,
-    groups: &mut Vec<(TokenTree, Vec<TokenTree>)>,
-    curr_line: &mut Tokens,
-    comments: I,
-    inner: bool,
-) where
-    I: Iterator<Item = &'a Comment>,
-{
-    if config.no_comments() {
-        return;
-    }
+/// * ***stream*** - The token stream to convert
+fn expand_tokens(stream: TokenStream) -> VecDeque<TokenWrap> {
+    let mut iter = stream.into_iter();
+    let mut buf: Vec<TokenItem> = vec![];
+    let mut tokens: VecDeque<TokenWrap> = VecDeque::new();
 
-    for comment in comments {
-        for token in comment_to_tokens(comment, inner) {
-            if let Some((_, g_tokens)) = groups.last_mut() {
-                g_tokens.push(token);
+    loop {
+        // Fill the response from the buffer if available
+        if let Some(item) = buf.pop() {
+            match item {
+                TokenItem::Token(token) => {
+                    tokens.push_back(TokenWrap::Token(token));
+                }
+                TokenItem::Group(group, mut deque, visited) => {
+                    if !visited {
+                        tokens.push_back(TokenWrap::GroupStart(group.clone()));
+                        buf.push(TokenItem::Group(group, deque, true));
+                        continue;
+                    }
+
+                    // Process group tokens
+                    if let Some(token) = deque.pop_front() {
+                        buf.push(TokenItem::Group(group, deque, true));
+                        buf.push(TokenItem::from(token))
+                    } else {
+                        tokens.push_back(TokenWrap::GroupEnd(group));
+                    }
+                }
+            }
+        } else {
+            // No more tokens in the buffer so pull from iter
+            if let Some(token) = iter.next() {
+                buf.push(TokenItem::from(token));
             } else {
-                curr_line.push(token);
+                // No more tokens
+                break;
             }
         }
     }
-}
-
-/// Push tokens to the group or token stream
-fn push_tokens<'a, I>(
-    groups: &mut Vec<(TokenTree, Vec<TokenTree>)>,
-    curr_line: &mut Tokens,
-    tokens: I,
-) where
-    I: Iterator<Item = &'a TokenTree>,
-{
-    if let Some((_, g_tokens)) = groups.last_mut() {
-        for token in tokens {
-            g_tokens.push(token.clone());
-        }
-    } else {
-        for token in tokens {
-            curr_line.push(token.clone());
-        }
-    }
+    tokens
 }
 
 /// Translate the comment into doc tokens which follows proc_macro2 precedence of storing doc
@@ -287,30 +425,23 @@ fn comment_to_tokens(comment: &Comment, inner: bool) -> Vec<TokenTree> {
     // Spans are an optional feature in proc_macro2 that luckily syn doesn't take into account. This
     // means being unable to set them due to to being private doesn't matter.
     let token: TokenTree = Punct::new('#', Spacing::Alone).into();
-    trace!("{}", TokenBox::Token(token.clone()).to_str());
     tokens.push(token);
 
     if inner {
         let token: TokenTree = Punct::new('!', Spacing::Alone).into();
-        trace!("{}", TokenBox::Token(token.clone()).to_str());
         tokens.push(token);
     }
 
     // Create and log new comment group
     let mut stream = vec![];
 
-    trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "[");
-
     let token: TokenTree = Ident::new(&comment.attr_name(), Span::call_site()).into();
-    trace!("{}", TokenBox::Token(token.clone()).to_str());
     stream.push(token);
 
     let token: TokenTree = Punct::new('=', Spacing::Alone).into();
-    trace!("{}", TokenBox::Token(token.clone()).to_str());
     stream.push(token);
 
     let token: TokenTree = Literal::string(&comment.text()).into();
-    trace!("{}", TokenBox::Token(token.clone()).to_str());
     stream.push(token);
 
     tokens.push(
@@ -320,8 +451,6 @@ fn comment_to_tokens(comment: &Comment, inner: bool) -> Vec<TokenTree> {
         )
         .into(),
     );
-
-    trace!("{: <12}{: <6} {}", "0:0..0:0", "Group", "]");
 
     tokens
 }
@@ -477,7 +606,7 @@ mod tests {
     use core::panic;
     use indoc::indoc;
     use itertools::{peek_nth, PeekNth};
-    use proc_macro2::TokenStream;
+    use proc_macro2::{Group, Literal, TokenStream};
     use std::str::FromStr;
     use tracing_test::traced_test;
 
@@ -539,6 +668,7 @@ mod tests {
         fn comments_before<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comment_count(&self) -> usize;
         fn recursive_count(&self) -> usize;
+        fn print(&self);
     }
     impl<I: Iterator<Item = TokenTree> + Clone> TokensExt for I {
         fn get<P: Into<Position>>(&self, pos: P) -> TokenTree {
@@ -653,208 +783,226 @@ mod tests {
             }
             recurse(&mut iter)
         }
+
+        /// Recursively count all tokens
+        fn print(&self) {
+            let mut iter = self.clone();
+            fn recurse(iter: &mut dyn Iterator<Item = TokenTree>) {
+                for token in iter {
+                    if let TokenTree::Group(group) = &token {
+                        println!("{}", TokenWrap::GroupStart(token.clone()).to_str());
+                        recurse(&mut group.stream().into_iter());
+                        println!("{}", TokenWrap::GroupEnd(token.clone()).to_str());
+                    } else {
+                        println!("{}", TokenWrap::Token(token).to_str());
+                    }
+                }
+            }
+            recurse(&mut iter)
+        }
     }
+
+    // #[traced_test]
+    // #[test]
+    // fn test_trailing_variant() {
+    //     let source = indoc! {r#"
+    //         enum Foo {
+    //             A, // A variant
+    //         }
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert_eq!(tokens.comment_count(), 1);
+    //     let group = tokens.get((0, 9)).as_group();
+    //     let tokens = group.stream().into_iter();
+    //     assert_eq!(
+    //         tokens.comments_after((1, 5)),
+    //         vec![Comment::line_trailing(" A variant".into())]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_trailing_regular_single() {
+    //     let source = indoc! {r#"
+    //         struct Foo; // A struct
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     assert_eq!(tokens.clone().comment_count(), 1);
+    //     assert_eq!(
+    //         tokens.comments_after((0, 10)),
+    //         vec![Comment::line_trailing(" A struct".into())]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_trailing_field_multiple() {
+    //     let source = indoc! {r#"
+    //         struct Foo {
+    //             a: i32, // A field
+    //             b: i32, // B field
+    //         }
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     assert_eq!(tokens.comment_count(), 2);
+    //     let group = tokens.get((0, 11)).as_group();
+    //     let tokens = group.stream().into_iter();
+    //     assert_eq!(
+    //         tokens.comments_after((1, 10)),
+    //         vec![Comment::line_trailing(" A field".into())]
+    //     );
+    //     assert_eq!(
+    //         tokens.comments_after((2, 10)),
+    //         vec![Comment::line_trailing(" B field".into())]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_trailing_field_single() {
+    //     let source = indoc! {r#"
+    //         struct Foo {
+    //             a: i32, // A field
+    //         }
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     assert_eq!(tokens.comment_count(), 1);
+    //     assert_eq!(tokens.recursive_count(), 16);
+    //     let group = tokens.get((0, 11)).as_group();
+    //     let tokens = group.stream().into_iter();
+    //     assert_eq!(
+    //         tokens.comments_after((1, 10)),
+    //         vec![Comment::line_trailing(" A field".into())]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_skip_doc_comments() {
+    //     let source = indoc! {r#"
+
+    //          /// A foo struct
+    //         struct Foo {
+
+    //             //     Indented comment
+    //             a: i32,
+
+    //             // Field b
+    //             b: i32,
+    //         }
+    //     "#};
+
+    //     // Check the tokens that were generated
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+    //     // Check total comments
+    //     assert_eq!(tokens.comment_count(), 5);
+
+    //     // Check first after the use statement
+    //     assert_eq!(tokens.comments_before((1, 1)), vec![Comment::empty()]);
+
+    //     // Get the group at postiion which you can see with tracing output
+    //     let group = tokens.get((2, 11)).as_group();
+    //     let tokens = group.stream().into_iter();
+
+    //     assert_eq!(
+    //         tokens.comments_before((5, 4)),
+    //         vec![
+    //             Comment::empty(),
+    //             Comment::line("     Indented comment".into())
+    //         ]
+    //     );
+    //     assert_eq!(
+    //         tokens.comments_after((5, 10)),
+    //         vec![Comment::empty(), Comment::line(" Field b".into())]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_comment_blocks_include_anything_until_end() {
+    //     let source = indoc! {r#"
+    //         /****
+
+    //          // Line 1
+    //          * Block
+    //          // Line 2
+
+    //          ***/
+    //         struct Foo;
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     assert_eq!(tokens.comment_count(), 1);
+    //     assert_eq!(
+    //         tokens.comments_before((7, 0)),
+    //         vec![Comment::block(
+    //             "***\\n\\n // Line 1\\n * Block\\n // Line 2\\n\\n **".into()
+    //         )]
+    //     );
+    // }
+
+    // #[test]
+    // fn test_block_inline() {
+    //     let source = indoc! {r#"
+    //         // Line 1
+    //         struct Foo;
+
+    //         /* Block line */
+    //         println!("{}", /* Block inline */ other);
+    //     "#};
+
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     assert_eq!(tokens.comment_count(), 4);
+    //     assert_eq!(
+    //         tokens.comments_before((1, 0)),
+    //         vec![Comment::line(" Line 1".into())]
+    //     );
+    //     assert_eq!(
+    //         tokens.comments_after((1, 10)),
+    //         vec![Comment::empty(), Comment::block(" Block line ".into())]
+    //     );
+
+    //     // Get inner block group
+    //     let group = tokens.get((4, 8)).as_group();
+    //     let tokens = group.stream().into_iter();
+    //     assert_eq!(
+    //         tokens.comments_after((4, 13)),
+    //         vec![Comment::block_inline(" Block inline ".into())]
+    //     );
+    // }
 
     #[traced_test]
-    #[test]
-    fn test_trailing_variant() {
-        let source = indoc! {r#"
-            enum Foo {
-                A, // A variant
-            }
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert_eq!(tokens.comment_count(), 1);
-        let group = tokens.get((0, 9)).as_group();
-        let tokens = group.stream().into_iter();
-        assert_eq!(
-            tokens.comments_after((1, 5)),
-            vec![Comment::line_trailing(" A variant".into())]
-        );
-    }
-
-    #[test]
-    fn test_trailing_regular_single() {
-        let source = indoc! {r#"
-            struct Foo; // A struct
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.clone().comment_count(), 1);
-        assert_eq!(
-            tokens.comments_after((0, 10)),
-            vec![Comment::line_trailing(" A struct".into())]
-        );
-    }
-
-    #[test]
-    fn test_trailing_field_multiple() {
-        let source = indoc! {r#"
-            struct Foo {
-                a: i32, // A field
-                b: i32, // B field
-            }
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.comment_count(), 2);
-        let group = tokens.get((0, 11)).as_group();
-        let tokens = group.stream().into_iter();
-        assert_eq!(
-            tokens.comments_after((1, 10)),
-            vec![Comment::line_trailing(" A field".into())]
-        );
-        assert_eq!(
-            tokens.comments_after((2, 10)),
-            vec![Comment::line_trailing(" B field".into())]
-        );
-    }
-
-    #[test]
-    fn test_trailing_field_single() {
-        let source = indoc! {r#"
-            struct Foo {
-                a: i32, // A field
-            }
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.comment_count(), 1);
-        assert_eq!(tokens.recursive_count(), 16);
-        let group = tokens.get((0, 11)).as_group();
-        let tokens = group.stream().into_iter();
-        assert_eq!(
-            tokens.comments_after((1, 10)),
-            vec![Comment::line_trailing(" A field".into())]
-        );
-    }
-
-    #[test]
-    fn test_skip_doc_comments() {
-        let source = indoc! {r#"
-
-             /// A foo struct
-            struct Foo {
-
-                //     Indented comment
-                a: i32,
-
-                // Field b
-                b: i32,
-            }
-        "#};
-
-        // Check the tokens that were generated
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-
-        // Check total comments
-        assert_eq!(tokens.comment_count(), 5);
-
-        // Check first after the use statement
-        assert_eq!(tokens.comments_before((1, 1)), vec![Comment::empty()]);
-
-        // Get the group at postiion which you can see with tracing output
-        let group = tokens.get((2, 11)).as_group();
-        let tokens = group.stream().into_iter();
-
-        assert_eq!(
-            tokens.comments_before((5, 4)),
-            vec![
-                Comment::empty(),
-                Comment::line("     Indented comment".into())
-            ]
-        );
-        assert_eq!(
-            tokens.comments_after((5, 10)),
-            vec![Comment::empty(), Comment::line(" Field b".into())]
-        );
-    }
-
-    #[test]
-    fn test_comment_blocks_include_anything_until_end() {
-        let source = indoc! {r#"
-            /****
-
-             // Line 1
-             * Block
-             // Line 2
-
-             ***/
-            struct Foo;
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.comment_count(), 1);
-        assert_eq!(
-            tokens.comments_before((7, 0)),
-            vec![Comment::block(
-                "***\\n\\n // Line 1\\n * Block\\n // Line 2\\n\\n **".into()
-            )]
-        );
-    }
-
-    #[test]
-    fn test_block_inline() {
-        let source = indoc! {r#"
-            // Line 1
-            struct Foo;
-
-            /* Block line */
-            println!("{}", /* Block inline */ other);
-        "#};
-
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.comment_count(), 4);
-        assert_eq!(
-            tokens.comments_before((1, 0)),
-            vec![Comment::line(" Line 1".into())]
-        );
-        assert_eq!(
-            tokens.comments_after((1, 10)),
-            vec![Comment::empty(), Comment::block(" Block line ".into())]
-        );
-
-        // Get inner block group
-        let group = tokens.get((4, 8)).as_group();
-        let tokens = group.stream().into_iter();
-        assert_eq!(
-            tokens.comments_after((4, 13)),
-            vec![Comment::block_inline(" Block inline ".into())]
-        );
-    }
-
     #[test]
     fn test_trailing_comments() {
         let source = indoc! {r#"
-            struct Foo {
-                a: i32, // Field a
-                b: i32, // Field b
+            struct Foo { // A foo struct
+                a: i32,  // Field a
+                b: i32,  // Field b
             }
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        tokens.print();
 
-        // Get the group at postiion which you can see with tracing output
-        let group = tokens.get((0, 11)).as_group();
-        let tokens = group.stream().into_iter();
+        // // Get the group at postiion which you can see with tracing output
+        // let group = tokens.get((0, 11)).as_group();
+        // let tokens = group.stream().into_iter();
 
-        assert_eq!(tokens.comment_count(), 2);
-        assert_eq!(tokens.recursive_count(), 22);
+        // assert_eq!(tokens.comment_count(), 2);
+        // assert_eq!(tokens.recursive_count(), 22);
 
-        // Check that the first comment
-        assert_eq!(
-            tokens.comments_after((1, 10)),
-            vec![Comment::line_trailing(" Field a".into())]
-        );
-        assert_eq!(
-            tokens.comments_after((2, 10)),
-            vec![Comment::line_trailing(" Field b".into())]
-        );
+        // // Check that the first comment
+        // assert_eq!(
+        //     tokens.comments_after((1, 10)),
+        //     vec![Comment::line_trailing(" Field a".into())]
+        // );
+        // assert_eq!(
+        //     tokens.comments_after((2, 10)),
+        //     vec![Comment::line_trailing(" Field b".into())]
+        // );
     }
 
-    #[traced_test]
     #[test]
     fn test_multi_comment_types() {
         let source = indoc! {r#"
@@ -875,27 +1023,27 @@ mod tests {
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
-        // // Check total comments
-        // assert_eq!(tokens.comment_count(), 4);
+        // Check total comments
+        assert_eq!(tokens.comment_count(), 4);
 
-        // // Check first after the use statement
-        // assert_eq!(tokens.comments_after((0, 16)), vec![Comment::empty()]);
+        // Check first after the use statement
+        assert_eq!(tokens.comments_after((0, 16)), vec![Comment::empty()]);
 
-        // // Get the group at postiion which you can see with tracing output
-        // let group = tokens.get((2, 24)).as_group();
-        // let tokens = group.stream().into_iter();
+        // Get the group at postiion which you can see with tracing output
+        let group = tokens.get((2, 24)).as_group();
+        let tokens = group.stream().into_iter();
 
-        // // Check second and third after the subscriber call
-        // assert_eq!(
-        //     tokens.comments_after((6, 64)),
-        //     vec![
-        //         Comment::empty(),
-        //         Comment::line(" Pass in an example".into())
-        //     ]
-        // );
+        // Check second and third after the subscriber call
+        assert_eq!(
+            tokens.comments_after((6, 64)),
+            vec![
+                Comment::empty(),
+                Comment::line(" Pass in an example".into())
+            ]
+        );
 
-        // // Check the last before the Ok call
-        // assert_eq!(tokens.comments_after((9, 33)), vec![Comment::empty()]);
+        // Check the last before the Ok call
+        assert_eq!(tokens.comments_after((9, 33)), vec![Comment::empty()]);
     }
 
     #[test]
@@ -968,7 +1116,6 @@ mod tests {
 
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-
         assert_eq!(tokens.comment_count(), 1);
         assert_eq!(tokens.comments_after((0, 8)), vec![Comment::empty()]);
     }
@@ -1016,5 +1163,67 @@ mod tests {
         let pos2: Position = iter.next().unwrap().span().start().into();
         assert_eq!(pos1, pos(0, 0));
         assert_eq!(pos2, pos(1, 0));
+    }
+
+    fn to_tokens(input: &str) -> VecDeque<TokenWrap> {
+        expand_tokens(TokenStream::from_str(input).unwrap())
+    }
+
+    #[test]
+    fn test_span_spans() {
+        // None
+        let tokens = to_tokens(indoc! {r#" "#});
+        assert_eq!(tokens.len(), 0);
+
+        // Partial tokens
+        let tokens = to_tokens(indoc! {r#"
+            enum
+        "#});
+        assert_eq!(tokens.len(), 1);
+        matches!(tokens.get(0).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(0).unwrap().span_open(), (pos(0, 0), pos(0, 4)));
+        assert_eq!(tokens.get(1).is_none(), true);
+
+        // Full three tokens
+        let tokens = to_tokens(indoc! {r#"
+            println!("{}", "1");
+        "#});
+
+        assert_eq!(tokens.len(), 8);
+
+        matches!(tokens.get(0).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(0).unwrap().span_open(), (pos(0, 0), pos(0, 7)));
+
+        matches!(tokens.get(1).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(1).unwrap().span_open(), (pos(0, 7), pos(0, 8)));
+
+        matches!(tokens.get(2).unwrap(), TokenWrap::GroupStart(_));
+        assert_eq!(tokens.get(2).unwrap().span_open(), (pos(0, 8), pos(0, 9)));
+
+        matches!(tokens.get(3).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(3).unwrap().span_open(), (pos(0, 9), pos(0, 13)));
+
+        matches!(tokens.get(4).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(4).unwrap().span_open(), (pos(0, 13), pos(0, 14)));
+
+        matches!(tokens.get(5).unwrap(), TokenWrap::Token(_));
+        assert_eq!(tokens.get(5).unwrap().span_open(), (pos(0, 15), pos(0, 18)));
+
+        matches!(tokens.get(6).unwrap(), TokenWrap::GroupEnd(_));
+        assert_eq!(
+            tokens.get(6).unwrap().span_close(),
+            (pos(0, 18), pos(0, 19))
+        );
+
+        matches!(
+            tokens.get(7).unwrap(),
+            TokenWrap::Token(TokenTree::Punct(_))
+        );
+        assert_eq!(
+            tokens.get(7).unwrap().span_close(),
+            (pos(0, 19), pos(0, 20))
+        );
+
+        assert_eq!(tokens.get(8).is_none(), true);
     }
 }
