@@ -53,130 +53,159 @@ impl<'a> Commenter<'a> {
         let mut stream = expand_tokens(stream);
 
         let mut src: Option<String>;
-        let mut store = false;
-        let mut complete = false;
         let mut newline = false;
 
-        loop {
-            // Leading comments
-            // -----------------------------------------------------------------------------------------
-            let (start0, end0) = stream.get(0).span_open();
-
-            // (0:0, max0/start0) - Handle leading comments i.e. haven't processed any tokens yet
-            if self.is_empty() {
-                // (0:0, max) - There are no tokens in the stream
-                if stream.is_empty() {
-                    src = self.source.range(None, None);
-                    if let Some(comments) = parse_comments(src.as_deref(), false) {
-                        self.append_curr_comments(comments, true);
-                    }
-
-                // (0:0, start0) - There is at least one token in the stream
-                } else {
-                    src = self.source.range(None, start0);
-                    if let Some(comments) = parse_comments(src.as_deref(), false) {
-                        self.append_curr_comments(comments, false);
-                    }
-                }
-            }
-
-            // Handle grouping and early termination
-            // -----------------------------------------------------------------------------------------
-            match stream.get(0) {
-                Some(wrap) => match wrap {
-                    TokenWrap::GroupStart(token) => {
-                        self.append_group(token.clone());
-                    }
-                    TokenWrap::GroupEnd(_) => {
-                        self.complete_group(wrap);
-                    }
-                    TokenWrap::Token(token) => {
-                        // Pass proc_macro2 parsed doc comments directly through without processing
-                        // ---------------------------------------------------------------------------------
-                        if let TokenTree::Punct(punct) = token {
-                            // unwrap is safe here as we have a token in this context
-                            if punct.as_char() == '#'
-                                && self.source.char_at_is(start0.unwrap(), '/')
-                            {
-                                self.append_curr(token.clone());
-                                let mut in_group = false;
-                                loop {
-                                    let curr = stream.pop_front();
-                                    if !self.pass_doc_comments(&mut in_group, end0.unwrap(), curr) {
-                                        break;
-                                    }
-                                }
-                                newline = true;
-                            } else {
-                                store = true;
-                            }
-                        } else {
-                            store = true;
-                        }
-                    }
-                },
-
-                // None: We've hit the end of the token stream
-                None => {
-                    complete = true;
-                }
-            }
-
-            // Store current token and check for comments between tokens
-            // -----------------------------------------------------------------------------------------
-
-            // Store the current token first so comments can be injected correctly
-            let token1 = if store {
-                self.append_curr(stream.pop_front().unwrap().take());
-                store = false;
-                stream.get(0)
-            } else {
-                stream.get(1)
-            };
-
-            // Handle queued line break for doc comments
-            self.complete_line(&mut newline);
-
-            // Check for comments next
-            let (start1, _) = token1.span_open();
-
-            if token1.is_some() {
-                src = self.source.range(end0, start1);
-
-                if let Some(comments) = parse_comments(src.as_deref(), true) {
-                    newline = comments.iter().any(|x| x.is_break());
-
-                    // Add trailing comments to begining of current line
-                    self.prepend_curr_comments(
-                        comments
-                            .clone()
-                            .into_iter()
-                            .filter(|x| x.is_trailing())
-                            .collect(),
-                        false,
-                    );
-
-                    // Add regular comments between tokens to next line
-                    self.append_next_comments(
-                        comments
-                            .clone()
-                            .into_iter()
-                            .filter(|x| x.is_regular())
-                            .collect(),
-                        false,
-                    );
-                }
-            }
-
-            // Handle code line break after comments so we can inject trailing comments before storing
-            self.complete_line(&mut newline);
-
-            if complete {
-                self.complete();
-                break;
+        // Comments file only
+        // -----------------------------------------------------------------------------------------
+        if self.is_empty() && stream.is_empty() {
+            src = self.source.range(None, None);
+            if let Some(comments) = parse_comments(src.as_deref(), false) {
+                self.append_curr_comments(comments, true);
             }
         }
+
+        while let Some(token0) = stream.pop_front() {
+            // Leading comments
+            // -------------------------------------------------------------------------------------
+            let (start0, end0) = token0.span_open();
+
+            // (0:0, start0) - Handle leading comments i.e. haven't processed any tokens yet
+            if self.is_empty() {
+                src = self.source.range(None, Some(start0));
+                if let Some(comments) = parse_comments(src.as_deref(), false) {
+                    self.append_curr_comments(comments, false);
+                }
+            }
+
+            // Start a new group
+            // -------------------------------------------------------------------------------------
+            if self.is_group_start(&token0) {
+                self.append_group(token0.take());
+
+            // End a new group
+            // -------------------------------------------------------------------------------------
+            } else if self.is_group_end(&token0) {
+                self.complete_group(&token0);
+
+            // Pass proc_macro2 parsed doc comments directly through without processing
+            // -------------------------------------------------------------------------------------
+            } else if self.is_doc_comment(&token0) {
+                self.append_curr(token0.take());
+                let mut in_group = false;
+                while self.pass_doc_comments(&mut in_group, end0, stream.pop_front()) {}
+                newline = true;
+                self.complete_line(&mut newline);
+
+            // Store regular tokens
+            // -------------------------------------------------------------------------------------
+            } else {
+                self.append_curr(token0.take());
+            }
+
+            // Check for comments between tokens
+            // -------------------------------------------------------------------------------------
+            if let Some(token1) = stream.front() {
+                let (start1, _) = token1.span_open();
+                self.inject_comments(end0, start1)
+            }
+        }
+
+        self.complete();
         self
+    }
+
+    /// Check the given range and inject any found comments in the appropriate lines
+    ///
+    /// * ***start***: Start position of the range
+    /// * ***end***: End position of the range
+    fn inject_comments(&mut self, start: Position, end: Position) {
+        let mut newline = false;
+        let src = self.source.range(Some(start), Some(end));
+
+        if let Some(comments) = parse_comments(src.as_deref(), true) {
+            newline = comments.iter().any(|x| x.is_break());
+
+            // Add trailing comments to begining of current line
+            self.prepend_curr_comments(
+                comments
+                    .clone()
+                    .into_iter()
+                    .filter(|x| x.is_trailing())
+                    .collect(),
+                false,
+            );
+
+            // Add regular comments between tokens to next line
+            self.append_next_comments(
+                comments
+                    .clone()
+                    .into_iter()
+                    .filter(|x| x.is_regular())
+                    .collect(),
+                false,
+            );
+        }
+        self.complete_line(&mut newline);
+    }
+
+    /// Check if the token is a group start
+    fn is_group_start(&self, wrap: &TokenWrap) -> bool {
+        if let TokenWrap::GroupStart(_) = wrap {
+            return true;
+        }
+        false
+    }
+
+    /// Check if the token is a group end
+    fn is_group_end(&self, wrap: &TokenWrap) -> bool {
+        if let TokenWrap::GroupEnd(_) = wrap {
+            return true;
+        }
+        false
+    }
+
+    /// Check if the token is a doc comment
+    fn is_doc_comment(&self, wrap: &TokenWrap) -> bool {
+        if let TokenWrap::Token(token) = wrap {
+            let (start, _) = wrap.span_open();
+
+            if let TokenTree::Punct(punct) = token {
+                if punct.as_char() == '#' && self.source.char_at_is(start, '/') {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Pass through doc comments as is
+    ///
+    /// * ***in_group***: Are we currently in a group
+    /// * ***end***: End position of the doc comment
+    /// * ***curr***: Current token to check
+    /// * ***next***: Next token to check
+    /// * ***return***: True if we need to continue processing
+    fn pass_doc_comments(
+        &mut self,
+        in_group: &mut bool,
+        end: Position,
+        curr: Option<TokenWrap>,
+    ) -> bool {
+        if let Some(token) = curr {
+            let (start, _) = token.span_open();
+            if start < end {
+                trace!("{}", token.to_str());
+                if !*in_group || token.is_group_start() {
+                    *in_group = token.is_group_start();
+                    self.append_curr(token.take());
+                } else if let TokenWrap::GroupEnd(_) = token {
+                    *in_group = false;
+                    return false; // done
+                }
+                return true;
+            }
+        }
+        false
     }
 
     /// Is the token stream empty
@@ -329,35 +358,6 @@ impl<'a> Commenter<'a> {
         }
     }
 
-    /// Pass through doc comments as is
-    ///
-    /// * ***in_group***: Are we currently in a group
-    /// * ***end***: End position of the doc comment
-    /// * ***curr***: Current token to check
-    /// * ***next***: Next token to check
-    /// * ***return***: True if we need to continue processing
-    fn pass_doc_comments(
-        &mut self,
-        in_group: &mut bool,
-        end: Position,
-        curr: Option<TokenWrap>,
-    ) -> bool {
-        if let Some(token) = curr {
-            let (start, _) = token.span_open();
-            if start < end {
-                trace!("{}", token.to_str());
-                if !*in_group || token.is_group_start() {
-                    *in_group = token.is_group_start();
-                    self.append_curr(token.take());
-                } else if let TokenWrap::GroupEnd(_) = token {
-                    *in_group = false;
-                    return false; // done
-                }
-                return true;
-            }
-        }
-        false
-    }
     /// Convert the token matrix into a TokenStream
     pub(crate) fn into_token_stream(self) -> TokenStream {
         self.groups
