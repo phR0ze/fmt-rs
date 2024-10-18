@@ -100,10 +100,7 @@ impl<'a> Commenter<'a> {
 
             // Check for comments between tokens
             // -------------------------------------------------------------------------------------
-            if let Some(token1) = self.stream.front() {
-                let (start1, _) = token1.span_open();
-                self.inject_comments(end0, start1)
-            }
+            self.inject_comments(end0)
         }
 
         self.complete();
@@ -113,35 +110,38 @@ impl<'a> Commenter<'a> {
     /// Check the given range and inject any found comments in the appropriate lines
     ///
     /// * ***start***: Start position of the range
-    /// * ***end***: End position of the range
-    fn inject_comments(&mut self, start: Position, end: Position) {
-        let mut newline = false;
-        let src = self.source.range(Some(start), Some(end));
+    fn inject_comments(&mut self, start: Position) {
+        if let Some(token1) = self.stream.front() {
+            // Get the next token's start position which will be the end
+            let end = token1.span_open().0;
+            let src = self.source.range(Some(start), Some(end));
 
-        if let Some(comments) = parse_comments(src.as_deref(), true) {
-            newline = comments.iter().any(|x| x.is_break());
+            let mut newline = false;
+            if let Some(comments) = parse_comments(src.as_deref(), true) {
+                newline = comments.iter().any(|x| x.is_break());
 
-            // Add trailing comments to begining of current line
-            self.prepend_curr_comments(
-                comments
-                    .clone()
-                    .into_iter()
-                    .filter(|x| x.is_trailing())
-                    .collect(),
-                false,
-            );
+                // Add trailing comments to begining of current line
+                self.prepend_curr_comments(
+                    comments
+                        .clone()
+                        .into_iter()
+                        .filter(|x| x.is_trailing())
+                        .collect(),
+                    false,
+                );
 
-            // Add regular comments between tokens to next line
-            self.append_next_comments(
-                comments
-                    .clone()
-                    .into_iter()
-                    .filter(|x| x.is_regular())
-                    .collect(),
-                false,
-            );
+                // Add regular comments between tokens to next line
+                self.append_next_comments(
+                    comments
+                        .clone()
+                        .into_iter()
+                        .filter(|x| x.is_regular())
+                        .collect(),
+                    false,
+                );
+            }
+            self.complete_line(newline);
         }
-        self.complete_line(newline);
     }
 
     /// Check if the token is a group start
