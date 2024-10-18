@@ -51,9 +51,7 @@ impl<'a> Commenter<'a> {
     /// Inject comments into the token stream from the source
     pub(crate) fn inject(mut self, stream: TokenStream) -> Self {
         let mut stream = expand_tokens(stream);
-
         let mut src: Option<String>;
-        let mut newline = false;
 
         // Comments file only
         // -----------------------------------------------------------------------------------------
@@ -65,11 +63,10 @@ impl<'a> Commenter<'a> {
         }
 
         while let Some(token0) = stream.pop_front() {
-            // Leading comments
-            // -------------------------------------------------------------------------------------
             let (start0, end0) = token0.span_open();
 
-            // (0:0, start0) - Handle leading comments i.e. haven't processed any tokens yet
+            // Leading comments - haven't processed any tokens yet
+            // -------------------------------------------------------------------------------------
             if self.is_empty() {
                 src = self.source.range(None, Some(start0));
                 if let Some(comments) = parse_comments(src.as_deref(), false) {
@@ -93,8 +90,7 @@ impl<'a> Commenter<'a> {
                 self.append_curr(token0.take());
                 let mut in_group = false;
                 while self.pass_doc_comments(&mut in_group, end0, stream.pop_front()) {}
-                newline = true;
-                self.complete_line(&mut newline);
+                self.complete_line(true);
 
             // Store regular tokens
             // -------------------------------------------------------------------------------------
@@ -145,7 +141,7 @@ impl<'a> Commenter<'a> {
                 false,
             );
         }
-        self.complete_line(&mut newline);
+        self.complete_line(newline);
     }
 
     /// Check if the token is a group start
@@ -348,13 +344,12 @@ impl<'a> Commenter<'a> {
     }
 
     /// Conditionally handle a line break
-    fn complete_line(&mut self, newline: &mut bool) {
-        if *newline {
+    fn complete_line(&mut self, newline: bool) {
+        if newline {
             trace!("Code break");
 
             // There will always be at least the root group
             self.groups.last_mut().unwrap().complete_line();
-            *newline = false;
         }
     }
 
