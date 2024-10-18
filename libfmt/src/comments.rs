@@ -26,7 +26,7 @@ pub(crate) fn inject(config: &Config, source: &str) -> Result<TokenStream> {
         .map_err(|e| Error::new("failed to parse source into token stream").wrap_lex(e))?;
 
     // Inject comments into the token stream
-    let commenter = Commenter::new(config, Source::new(source)).inject(tokens);
+    let commenter = Commenter::new(config, Source::new(source), tokens).inject();
     Ok(commenter.into_token_stream())
 }
 
@@ -36,33 +36,34 @@ pub(crate) struct Commenter<'a> {
     config: &'a Config,
     source: Source,
     groups: Vec<TokenGroup>,
+    stream: VecDeque<TokenWrap>,
 }
 
 impl<'a> Commenter<'a> {
     /// Create a new instance
-    pub(crate) fn new(config: &'a Config, source: Source) -> Self {
+    pub(crate) fn new(config: &'a Config, source: Source, stream: TokenStream) -> Self {
         Self {
             config,
             source,
+            stream: expand_tokens(stream),
             groups: vec![TokenGroup::new(None)],
         }
     }
 
     /// Inject comments into the token stream from the source
-    pub(crate) fn inject(mut self, stream: TokenStream) -> Self {
-        let mut stream = expand_tokens(stream);
+    pub(crate) fn inject(mut self) -> Self {
         let mut src: Option<String>;
 
         // Comments file only
         // -----------------------------------------------------------------------------------------
-        if self.is_empty() && stream.is_empty() {
+        if self.is_empty() && self.stream.is_empty() {
             src = self.source.range(None, None);
             if let Some(comments) = parse_comments(src.as_deref(), false) {
                 self.append_curr_comments(comments, true);
             }
         }
 
-        while let Some(token0) = stream.pop_front() {
+        while let Some(token0) = self.stream.pop_front() {
             let (start0, end0) = token0.span_open();
 
             // Leading comments - haven't processed any tokens yet
@@ -88,8 +89,7 @@ impl<'a> Commenter<'a> {
             // -------------------------------------------------------------------------------------
             } else if self.is_doc_comment(&token0) {
                 self.append_curr(token0.take());
-                let mut in_group = false;
-                while self.pass_doc_comments(&mut in_group, end0, stream.pop_front()) {}
+                self.pass_doc_comments(end0);
                 self.complete_line(true);
 
             // Store regular tokens
@@ -100,7 +100,7 @@ impl<'a> Commenter<'a> {
 
             // Check for comments between tokens
             // -------------------------------------------------------------------------------------
-            if let Some(token1) = stream.front() {
+            if let Some(token1) = self.stream.front() {
                 let (start1, _) = token1.span_open();
                 self.inject_comments(end0, start1)
             }
@@ -175,33 +175,24 @@ impl<'a> Commenter<'a> {
     }
 
     /// Pass through doc comments as is
-    ///
-    /// * ***in_group***: Are we currently in a group
     /// * ***end***: End position of the doc comment
-    /// * ***curr***: Current token to check
-    /// * ***next***: Next token to check
-    /// * ***return***: True if we need to continue processing
-    fn pass_doc_comments(
-        &mut self,
-        in_group: &mut bool,
-        end: Position,
-        curr: Option<TokenWrap>,
-    ) -> bool {
-        if let Some(token) = curr {
+    fn pass_doc_comments(&mut self, end: Position) {
+        let mut in_group = false;
+
+        while let Some(token) = self.stream.pop_front() {
             let (start, _) = token.span_open();
             if start < end {
                 trace!("{}", token.to_str());
-                if !*in_group || token.is_group_start() {
-                    *in_group = token.is_group_start();
+                if !in_group || token.is_group_start() {
+                    in_group = token.is_group_start();
                     self.append_curr(token.take());
                 } else if let TokenWrap::GroupEnd(_) = token {
-                    *in_group = false;
-                    return false; // done
+                    break;
                 }
-                return true;
+            } else {
+                break;
             }
         }
-        false
     }
 
     /// Is the token stream empty
@@ -967,36 +958,36 @@ mod tests {
     //     );
     // }
 
-    #[traced_test]
-    #[test]
-    fn test_trailing_comments() {
-        let source = indoc! {r#"
-            struct Foo { // A foo struct
-                a: i32,  // Field a
-                b: i32,  // Field b
-            }
-        "#};
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        tokens.print();
+    // #[traced_test]
+    // #[test]
+    // fn test_trailing_comments() {
+    //     let source = indoc! {r#"
+    //         struct Foo { // A foo struct
+    //             a: i32,  // Field a
+    //             b: i32,  // Field b
+    //         }
+    //     "#};
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     tokens.print();
 
-        // // Get the group at postiion which you can see with tracing output
-        // let group = tokens.get((0, 11)).as_group();
-        // let tokens = group.stream().into_iter();
+    //     // // Get the group at postiion which you can see with tracing output
+    //     // let group = tokens.get((0, 11)).as_group();
+    //     // let tokens = group.stream().into_iter();
 
-        // assert_eq!(tokens.comment_count(), 2);
-        // assert_eq!(tokens.recursive_count(), 22);
+    //     // assert_eq!(tokens.comment_count(), 2);
+    //     // assert_eq!(tokens.recursive_count(), 22);
 
-        // // Check that the first comment
-        // assert_eq!(
-        //     tokens.comments_after((1, 10)),
-        //     vec![Comment::line_trailing(" Field a".into())]
-        // );
-        // assert_eq!(
-        //     tokens.comments_after((2, 10)),
-        //     vec![Comment::line_trailing(" Field b".into())]
-        // );
-    }
+    //     // // Check that the first comment
+    //     // assert_eq!(
+    //     //     tokens.comments_after((1, 10)),
+    //     //     vec![Comment::line_trailing(" Field a".into())]
+    //     // );
+    //     // assert_eq!(
+    //     //     tokens.comments_after((2, 10)),
+    //     //     vec![Comment::line_trailing(" Field b".into())]
+    //     // );
+    // }
 
     #[test]
     fn test_multi_comment_types() {
