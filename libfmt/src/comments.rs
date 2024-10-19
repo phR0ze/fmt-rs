@@ -63,13 +63,19 @@ impl<'a> Commenter<'a> {
             }
         }
 
-        while let Some(token0) = self.stream.pop_front() {
-            let (start0, end0) = token0.span_open();
+        let mut end = Position::default();
+        while let Some(curr) = self.stream.pop_front() {
+            let (start, end0) = curr.span_open();
+
+            // Group end's will have stale positions we need to avoid
+            if end0 > end {
+                end = end0;
+            }
 
             // Leading comments - haven't processed any tokens yet
             // -------------------------------------------------------------------------------------
             if self.is_empty() {
-                src = self.source.range(None, Some(start0));
+                src = self.source.range(None, Some(start));
                 if let Some(comments) = parse_comments(src.as_deref(), false) {
                     self.append_curr_comments(comments, false);
                 }
@@ -77,71 +83,101 @@ impl<'a> Commenter<'a> {
 
             // Start a new group
             // -------------------------------------------------------------------------------------
-            if self.is_group_start(&token0) {
-                self.append_group(token0.take());
-
-            // End a new group
-            // -------------------------------------------------------------------------------------
-            } else if self.is_group_end(&token0) {
-                self.complete_group(&token0);
+            if self.is_group_start(&curr) {
+                end = self.prepend_trailing_comments(end);
+                self.append_group(curr.take());
 
             // Pass proc_macro2 parsed doc comments directly through without processing
             // -------------------------------------------------------------------------------------
-            } else if self.is_doc_comment(&token0) {
-                self.append_curr(token0.take());
-                self.pass_doc_comments(end0);
+            } else if self.is_doc_comment(&curr) {
+                self.append_curr(curr.take());
+                self.pass_doc_comments(end);
                 self.complete_line(true);
+
+            // End a new group
+            // -------------------------------------------------------------------------------------
+            } else if self.is_group_end(&curr) {
+                self.inject_comments(end);
+                self.complete_group(&curr);
+                continue;
 
             // Store regular tokens
             // -------------------------------------------------------------------------------------
             } else {
-                self.append_curr(token0.take());
+                self.append_curr(curr.take());
             }
 
             // Check for comments between tokens
             // -------------------------------------------------------------------------------------
-            self.inject_comments(end0)
+            self.inject_comments(end);
         }
 
         self.complete();
         self
     }
 
-    /// Check the given range and inject any found comments in the appropriate lines
+    /// Inject any comments trailing the current line of code
     ///
-    /// * ***start***: Start position of the range
-    fn inject_comments(&mut self, start: Position) {
+    /// * ***start***: Start position of the current line
+    /// * ***return***: End position of the current line or if no comments are found the original start
+    fn prepend_trailing_comments(&mut self, start: Position) -> Position {
         if let Some(token1) = self.stream.front() {
             // Get the next token's start position which will be the end
             let end = token1.span_open().0;
             let src = self.source.range(Some(start), Some(end));
 
-            let mut newline = false;
             if let Some(comments) = parse_comments(src.as_deref(), true) {
-                newline = comments.iter().any(|x| x.is_break());
+                // Determine if we have any trailing comments
+                let comments: Vec<Comment> = comments
+                    .clone()
+                    .into_iter()
+                    .filter(|x| x.is_trailing())
+                    .collect();
+                if !comments.is_empty() {
+                    self.prepend_curr_comments(comments, false);
 
-                // Add trailing comments to begining of current line
-                self.prepend_curr_comments(
-                    comments
-                        .clone()
-                        .into_iter()
-                        .filter(|x| x.is_trailing())
-                        .collect(),
-                    false,
-                );
-
-                // Add regular comments between tokens to next line
-                self.append_next_comments(
-                    comments
-                        .clone()
-                        .into_iter()
-                        .filter(|x| x.is_regular())
-                        .collect(),
-                    false,
-                );
+                    // Source location up to the first newline
+                    return self.source.inc_past_newline(start, end);
+                }
             }
-            self.complete_line(newline);
         }
+        start
+    }
+
+    /// Check the given range and inject any found comments in the appropriate lines
+    ///
+    /// * ***start***: Start position of the range
+    fn inject_comments(&mut self, start: Position) {
+        // Get the next token's start position or the end of the source which will be the end
+        let end = self.stream.front().span_open().0;
+        let src = self.source.range(Some(start), end);
+
+        let mut newline = false;
+        if let Some(comments) = parse_comments(src.as_deref(), true) {
+            // Trailing comments also act as line breaks
+            newline = comments.iter().any(|x| x.is_break() || x.is_trailing());
+
+            // Add trailing comments to begining of current line
+            self.prepend_curr_comments(
+                comments
+                    .clone()
+                    .into_iter()
+                    .filter(|x| x.is_trailing())
+                    .collect(),
+                false,
+            );
+
+            // Add regular comments between tokens to next line
+            self.append_next_comments(
+                comments
+                    .clone()
+                    .into_iter()
+                    .filter(|x| x.is_regular())
+                    .collect(),
+                false,
+            );
+        }
+        self.complete_line(newline);
     }
 
     /// Check if the token is a group start
@@ -958,36 +994,38 @@ mod tests {
     //     );
     // }
 
-    // #[traced_test]
-    // #[test]
-    // fn test_trailing_comments() {
-    //     let source = indoc! {r#"
-    //         struct Foo { // A foo struct
-    //             a: i32,  // Field a
-    //             b: i32,  // Field b
-    //         }
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     tokens.print();
+    #[traced_test]
+    #[test]
+    fn test_trailing_comments() {
+        let source = indoc! {r#"
+            struct Foo { // A foo struct
+                a: i32,  // Field a
+                b: i32,  // Field b
+            }
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        tokens.print();
 
-    //     // // Get the group at postiion which you can see with tracing output
-    //     // let group = tokens.get((0, 11)).as_group();
-    //     // let tokens = group.stream().into_iter();
+        // Get the group at postiion which you can see with tracing output
+        let group = tokens.get((0, 11)).as_group();
+        let tokens = group.stream().into_iter();
 
-    //     // assert_eq!(tokens.comment_count(), 2);
-    //     // assert_eq!(tokens.recursive_count(), 22);
+        assert_eq!(tokens.comment_count(), 3);
 
-    //     // // Check that the first comment
-    //     // assert_eq!(
-    //     //     tokens.comments_after((1, 10)),
-    //     //     vec![Comment::line_trailing(" Field a".into())]
-    //     // );
-    //     // assert_eq!(
-    //     //     tokens.comments_after((2, 10)),
-    //     //     vec![Comment::line_trailing(" Field b".into())]
-    //     // );
-    // }
+        assert_eq!(
+            tokens.comments_after((0, 0)),
+            vec![Comment::line_trailing(" A foo struct".into())]
+        );
+        assert_eq!(
+            tokens.comments_after((1, 10)),
+            vec![Comment::line_trailing(" Field a".into())]
+        );
+        assert_eq!(
+            tokens.comments_after((2, 10)),
+            vec![Comment::line_trailing(" Field b".into())]
+        );
+    }
 
     #[test]
     fn test_multi_comment_types() {
@@ -1007,6 +1045,7 @@ mod tests {
             }
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
+
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
         // Check total comments

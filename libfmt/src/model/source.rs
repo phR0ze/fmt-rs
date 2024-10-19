@@ -71,22 +71,20 @@ impl Source {
         self.pos
     }
 
-    /// Check if the given range contains a newline character
+    /// Calculate new position by advancing until the first newline is found
     ///
     /// * ***start*** - The start position, inclusive
     /// * ***end*** - The end position inclusive
-    pub(crate) fn contains_newline(&self, start: Option<Position>, end: Option<Position>) -> bool {
-        if start.is_some() && end.is_some() {
-            let (start, end) = (start.unwrap(), end.unwrap());
-            let mut pos = start;
-            while pos < self.end && pos <= end {
-                if self.get(pos).filter(|x| *x == &'\n').is_some() {
-                    return true;
-                }
+    pub(crate) fn inc_past_newline(&self, start: Position, end: Position) -> Position {
+        let mut pos = start;
+        while pos < self.end && pos <= end {
+            if self.get(pos).filter(|x| *x == &'\n').is_some() {
                 pos = self.inc(pos);
+                return pos;
             }
+            pos = self.inc(pos);
         }
-        false
+        pos
     }
 
     /// Get the given range of characters as a string
@@ -234,20 +232,15 @@ mod tests {
     }
 
     #[test]
-    fn test_contains_newline() {
+    fn test_next_newline() {
         let source = Source::new("Hello\nFoo\n");
-        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 1)), false);
-        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 2)), false);
-        assert_eq!(source.contains_newline(pos2(0, 0), pos2(0, 5)), true);
-        assert_eq!(source.contains_newline(pos2(0, 5), pos2(0, 6)), true);
-        assert_eq!(source.contains_newline(pos2(0, 5), pos2(0, 7)), true);
-        assert_eq!(source.contains_newline(pos2(0, 6), pos2(0, 7)), false);
-        assert_eq!(source.contains_newline(pos2(0, 6), pos2(0, 9)), false);
-        assert_eq!(source.contains_newline(pos2(1, 0), pos2(1, 3)), true);
-
         assert_eq!(
-            source.contains_newline(Some(Position::default()), Some(Position::max())),
-            true
+            source.inc_past_newline(pos(0, 0), Position::max()),
+            pos(1, 0)
+        );
+        assert_eq!(
+            source.inc_past_newline(pos(1, 0), Position::max()),
+            pos(1, 4)
         );
     }
 
