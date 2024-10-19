@@ -824,177 +824,175 @@ mod tests {
         }
     }
 
-    // #[traced_test]
-    // #[test]
-    // fn test_trailing_variant() {
-    //     let source = indoc! {r#"
-    //         enum Foo {
-    //             A, // A variant
-    //         }
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert_eq!(tokens.comment_count(), 1);
-    //     let group = tokens.get((0, 9)).as_group();
-    //     let tokens = group.stream().into_iter();
-    //     assert_eq!(
-    //         tokens.comments_after((1, 5)),
-    //         vec![Comment::line_trailing(" A variant".into())]
-    //     );
-    // }
+    #[test]
+    fn test_trailing_variant() {
+        let source = indoc! {r#"
+            enum Foo {
+                A, // A variant
+            }
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 9)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((1, 4)),
+            vec![Comment::line_trailing(" A variant".into())]
+        );
+    }
 
-    // #[test]
-    // fn test_trailing_regular_single() {
-    //     let source = indoc! {r#"
-    //         struct Foo; // A struct
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     assert_eq!(tokens.clone().comment_count(), 1);
-    //     assert_eq!(
-    //         tokens.comments_after((0, 10)),
-    //         vec![Comment::line_trailing(" A struct".into())]
-    //     );
-    // }
+    #[test]
+    fn test_trailing_regular_single() {
+        let source = indoc! {r#"
+            struct Foo; // A struct
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        assert_eq!(tokens.clone().comment_count(), 1);
+        assert_eq!(
+            tokens.comments_before((0, 0)),
+            vec![Comment::line_trailing(" A struct".into())]
+        );
+    }
 
-    // #[test]
-    // fn test_trailing_field_multiple() {
-    //     let source = indoc! {r#"
-    //         struct Foo {
-    //             a: i32, // A field
-    //             b: i32, // B field
-    //         }
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     assert_eq!(tokens.comment_count(), 2);
-    //     let group = tokens.get((0, 11)).as_group();
-    //     let tokens = group.stream().into_iter();
-    //     assert_eq!(
-    //         tokens.comments_after((1, 10)),
-    //         vec![Comment::line_trailing(" A field".into())]
-    //     );
-    //     assert_eq!(
-    //         tokens.comments_after((2, 10)),
-    //         vec![Comment::line_trailing(" B field".into())]
-    //     );
-    // }
+    #[test]
+    fn test_trailing_field_multiple() {
+        let source = indoc! {r#"
+            struct Foo {
+                a: i32, // A field
+                b: i32, // B field
+            }
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        assert_eq!(tokens.comment_count(), 2);
+        let group = tokens.get((0, 11)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((1, 4)),
+            vec![Comment::line_trailing(" A field".into())]
+        );
+        assert_eq!(
+            tokens.comments_before((2, 4)),
+            vec![Comment::line_trailing(" B field".into())]
+        );
+    }
 
-    // #[test]
-    // fn test_trailing_field_single() {
-    //     let source = indoc! {r#"
-    //         struct Foo {
-    //             a: i32, // A field
-    //         }
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     assert_eq!(tokens.comment_count(), 1);
-    //     assert_eq!(tokens.recursive_count(), 16);
-    //     let group = tokens.get((0, 11)).as_group();
-    //     let tokens = group.stream().into_iter();
-    //     assert_eq!(
-    //         tokens.comments_after((1, 10)),
-    //         vec![Comment::line_trailing(" A field".into())]
-    //     );
-    // }
+    #[test]
+    fn test_trailing_field_single() {
+        let source = indoc! {r#"
+            struct Foo {
+                a: i32, // A field
+            }
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
-    // #[test]
-    // fn test_skip_doc_comments() {
-    //     let source = indoc! {r#"
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 11)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((1, 4)),
+            vec![Comment::line_trailing(" A field".into())]
+        );
+    }
 
-    //          /// A foo struct
-    //         struct Foo {
+    #[test]
+    fn test_skip_doc_comments() {
+        let source = indoc! {r#"
 
-    //             //     Indented comment
-    //             a: i32,
+             /// A foo struct
+            struct Foo {
 
-    //             // Field b
-    //             b: i32,
-    //         }
-    //     "#};
+                //     Indented comment
+                a: i32,
 
-    //     // Check the tokens that were generated
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+                // Field b
+                b: i32,
+            }
+        "#};
 
-    //     // Check total comments
-    //     assert_eq!(tokens.comment_count(), 5);
+        // Check the tokens that were generated
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
-    //     // Check first after the use statement
-    //     assert_eq!(tokens.comments_before((1, 1)), vec![Comment::empty()]);
+        // Check total comments
+        assert_eq!(tokens.comment_count(), 5);
 
-    //     // Get the group at postiion which you can see with tracing output
-    //     let group = tokens.get((2, 11)).as_group();
-    //     let tokens = group.stream().into_iter();
+        // Check first after the use statement
+        assert_eq!(tokens.comments_before((1, 1)), vec![Comment::empty()]);
 
-    //     assert_eq!(
-    //         tokens.comments_before((5, 4)),
-    //         vec![
-    //             Comment::empty(),
-    //             Comment::line("     Indented comment".into())
-    //         ]
-    //     );
-    //     assert_eq!(
-    //         tokens.comments_after((5, 10)),
-    //         vec![Comment::empty(), Comment::line(" Field b".into())]
-    //     );
-    // }
+        // Get the group at postiion which you can see with tracing output
+        let group = tokens.get((2, 11)).as_group();
+        let tokens = group.stream().into_iter();
 
-    // #[test]
-    // fn test_comment_blocks_include_anything_until_end() {
-    //     let source = indoc! {r#"
-    //         /****
+        assert_eq!(
+            tokens.comments_before((5, 4)),
+            vec![
+                Comment::empty(),
+                Comment::line("     Indented comment".into())
+            ]
+        );
+        assert_eq!(
+            tokens.comments_after((5, 10)),
+            vec![Comment::empty(), Comment::line(" Field b".into())]
+        );
+    }
 
-    //          // Line 1
-    //          * Block
-    //          // Line 2
+    #[test]
+    fn test_comment_blocks_include_anything_until_end() {
+        let source = indoc! {r#"
+            /****
 
-    //          ***/
-    //         struct Foo;
-    //     "#};
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     assert_eq!(tokens.comment_count(), 1);
-    //     assert_eq!(
-    //         tokens.comments_before((7, 0)),
-    //         vec![Comment::block(
-    //             "***\\n\\n // Line 1\\n * Block\\n // Line 2\\n\\n **".into()
-    //         )]
-    //     );
-    // }
+             // Line 1
+             * Block
+             // Line 2
 
-    // #[test]
-    // fn test_block_inline() {
-    //     let source = indoc! {r#"
-    //         // Line 1
-    //         struct Foo;
+             ***/
+            struct Foo;
+        "#};
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        assert_eq!(tokens.comment_count(), 1);
+        assert_eq!(
+            tokens.comments_before((7, 0)),
+            vec![Comment::block(
+                "***\\n\\n // Line 1\\n * Block\\n // Line 2\\n\\n **".into()
+            )]
+        );
+    }
 
-    //         /* Block line */
-    //         println!("{}", /* Block inline */ other);
-    //     "#};
+    #[test]
+    fn test_block_inline() {
+        let source = indoc! {r#"
+            // Line 1
+            struct Foo;
 
-    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
-    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-    //     assert_eq!(tokens.comment_count(), 4);
-    //     assert_eq!(
-    //         tokens.comments_before((1, 0)),
-    //         vec![Comment::line(" Line 1".into())]
-    //     );
-    //     assert_eq!(
-    //         tokens.comments_after((1, 10)),
-    //         vec![Comment::empty(), Comment::block(" Block line ".into())]
-    //     );
+            /* Block line */
+            println!("{}", /* Block inline */ other);
+        "#};
 
-    //     // Get inner block group
-    //     let group = tokens.get((4, 8)).as_group();
-    //     let tokens = group.stream().into_iter();
-    //     assert_eq!(
-    //         tokens.comments_after((4, 13)),
-    //         vec![Comment::block_inline(" Block inline ".into())]
-    //     );
-    // }
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        assert_eq!(tokens.comment_count(), 4);
+        assert_eq!(
+            tokens.comments_before((1, 0)),
+            vec![Comment::line(" Line 1".into())]
+        );
+        assert_eq!(
+            tokens.comments_after((1, 10)),
+            vec![Comment::empty(), Comment::block(" Block line ".into())]
+        );
 
-    #[traced_test]
+        // Get inner block group
+        let group = tokens.get((4, 8)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_after((4, 13)),
+            vec![Comment::block_inline(" Block inline ".into())]
+        );
+    }
+
     #[test]
     fn test_trailing_comments() {
         let source = indoc! {r#"
@@ -1005,24 +1003,24 @@ mod tests {
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        tokens.print();
+        // tokens.print();
+        assert_eq!(tokens.comment_count(), 3);
+
+        assert_eq!(
+            tokens.comments_before((0, 0)),
+            vec![Comment::line_trailing(" A foo struct".into())]
+        );
 
         // Get the group at postiion which you can see with tracing output
         let group = tokens.get((0, 11)).as_group();
         let tokens = group.stream().into_iter();
-
-        assert_eq!(tokens.comment_count(), 3);
-
+        assert_eq!(tokens.comment_count(), 2);
         assert_eq!(
-            tokens.comments_after((0, 0)),
-            vec![Comment::line_trailing(" A foo struct".into())]
-        );
-        assert_eq!(
-            tokens.comments_after((1, 10)),
+            tokens.comments_before((1, 4)),
             vec![Comment::line_trailing(" Field a".into())]
         );
         assert_eq!(
-            tokens.comments_after((2, 10)),
+            tokens.comments_before((2, 4)),
             vec![Comment::line_trailing(" Field b".into())]
         );
     }
