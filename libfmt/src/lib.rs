@@ -158,74 +158,200 @@ mod tests {
     //     );
     // }
 
+    // #[test]
+    // fn test_comment_inline_enum() {
+    //     let source = indoc! {r#"
+    //         enum Foo {
+    //             Bar1, // A field
+    //             Bar2, // A field
+    //         }
+    //     "#};
+    //     assert_eq!(
+    //         format_str(None, source).unwrap(),
+    //         indoc! {r#"
+    //             enum Foo {
+    //                 Bar1, // A field
+    //                 Bar2, // A field
+    //             }
+    //         "#},
+    //     );
+    // }
+
+    // #[test]
+    // fn test_comment_trailing_statements() {
+    //     let source = indoc! {r#"
+    //         println!("Hello"); // Hello
+    //     "#};
+    //     assert_eq!(
+    //         format_str(None, source).unwrap(),
+    //         indoc! {r#"
+    //             println!("Hello"); // Hello
+    //         "#},
+    //     );
+    // }
+
     #[test]
-    fn test_comment_inline_enum() {
+    fn test_comment_trailing_item_trait() {
         let source = indoc! {r#"
-            enum Foo {
-                Bar1, // A field
-                Bar2, // A field
+            trait Foo { // Foo
+                type Item; // Bar
+
+                const FOO: i32 = 42; // Foo
+                fn foo(); // Func foo
+                fn foo2() { // Func foo2
+                    println!("Hello");
+                }
             }
         "#};
         assert_eq!(
             format_str(None, source).unwrap(),
             indoc! {r#"
-                enum Foo {
-                    Bar1, // A field
-                    Bar2, // A field
+                trait Foo { // Foo
+                    type Item; // Bar
+
+                    const FOO: i32 = 42; // Foo
+                    fn foo(); // Func foo
+                    fn foo2() { // Func foo2
+                        println!("Hello");
+                    }
                 }
             "#},
         );
     }
 
-    #[traced_test]
     #[test]
-    fn test_comment_inline_regular() {
+    fn test_comment_trailing_item_struct() {
         let source = indoc! {r#"
-            struct Foo; // A struct
-            println!("Hello");
-        "#};
-        assert_eq!(
-            format_str(None, source).unwrap(),
-            indoc! {r#"
-                struct Foo; // A struct
-                println!("Hello");
-            "#},
-        );
-    }
-
-    #[traced_test]
-    #[test]
-    fn test_comment_trailing_struct() {
-        let source = indoc! {r#"
-            struct Foo; // A struct
-        "#};
-        assert_eq!(
-            format_str(None, source).unwrap(),
-            indoc! {r#"
-                struct Foo; // A struct
-            "#},
-        );
-    }
-
-    #[test]
-    fn test_comment_inline_field() {
-        let source = indoc! {r#"
-            struct Foo {
-                a: i32, // A field
+            struct Foo1; // Foo1 struct
+            struct Foo2 { // Foo2 struct
+                a: i32,     // A field
+                b: i32,     // B field
             }
         "#};
         assert_eq!(
             format_str(None, source).unwrap(),
             indoc! {r#"
-                struct Foo {
+                struct Foo1; // Foo1 struct
+                struct Foo2 { // Foo2 struct
                     a: i32, // A field
+                    b: i32, // B field
                 }
             "#},
         );
     }
 
     #[test]
-    fn test_comment_line_no_trailing_source() {
+    fn test_comment_trailing_item_static() {
+        let source = indoc! {r#"
+            static FOO: i32 = 42; // Foo
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                static FOO: i32 = 42; // Foo
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_trailing_item_mod() {
+        let source = indoc! {r#"
+            mod foo; // Foo
+            mod foo2 { // Foo
+                fn foo() {
+                    println!("Hello");
+                }
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                mod foo; // Foo
+                mod foo2 { // Foo
+                    fn foo() {
+                        println!("Hello");
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_trailing_item_impl() {
+        let source = indoc! {r#"
+            struct Foo;
+
+            impl Foo { // Foo
+                fn foo() {
+                    println!("Hello");
+                }
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo;
+
+                impl Foo { // Foo
+                    fn foo() {
+                        println!("Hello");
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_trailing_item_func() {
+        let source = indoc! {r#"
+            fn foo() { // Hello
+                println!("Hello");
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn foo() { // Hello
+                    println!("Hello");
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_trailing_item_enum() {
+        let source = indoc! {r#"
+            enum Enum2 { // Enum2
+                A, // A variant
+                B, // B variant
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                enum Enum2 { // Enum2
+                    A, // A variant
+                    B, // B variant
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_trailing_const() {
+        let source = indoc! {r#"
+            const FOO: i32 = 42; // Foo
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                const FOO: i32 = 42; // Foo
+            "#},
+        );
+    }
+
+    #[test]
+    fn test_comment_only_comments() {
         let source = indoc! {r#"
             // foo
         "#};

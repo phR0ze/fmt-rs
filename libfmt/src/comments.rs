@@ -73,7 +73,6 @@ impl<'a> Commenter<'a> {
             }
 
             // Leading comments - haven't processed any tokens yet
-            // -------------------------------------------------------------------------------------
             if self.is_empty() {
                 src = self.source.range(None, Some(start));
                 if let Some(comments) = parse_comments(src.as_deref(), false) {
@@ -82,33 +81,28 @@ impl<'a> Commenter<'a> {
             }
 
             // Start a new group
-            // -------------------------------------------------------------------------------------
             if self.is_group_start(&curr) {
                 end = self.prepend_trailing_comments(end);
                 self.append_group(curr.take());
 
             // Pass proc_macro2 parsed doc comments directly through without processing
-            // -------------------------------------------------------------------------------------
             } else if self.is_doc_comment(&curr) {
                 self.append_curr(curr.take());
                 self.pass_doc_comments(end);
                 self.complete_line(true);
 
             // End a new group
-            // -------------------------------------------------------------------------------------
             } else if self.is_group_end(&curr) {
                 self.inject_comments(end);
                 self.complete_group(&curr);
                 continue;
 
             // Store regular tokens
-            // -------------------------------------------------------------------------------------
             } else {
                 self.append_curr(curr.take());
             }
 
             // Check for comments between tokens
-            // -------------------------------------------------------------------------------------
             self.inject_comments(end);
         }
 
@@ -480,8 +474,8 @@ fn comment_to_tokens(comment: &Comment, inner: bool) -> Vec<TokenTree> {
 /// Parse comments from the given source range
 ///
 /// * ***src***: The source to extract comments from
-/// * ***trailing***: Potential for trailing comments
-fn parse_comments(src: Option<&str>, trailing: bool) -> Option<Vec<Comment>> {
+/// * ***some***: There is at least one token in the source
+fn parse_comments(src: Option<&str>, some: bool) -> Option<Vec<Comment>> {
     let src = src?;
     let mut comments: Vec<Comment> = vec![]; // final results
     let mut line = String::new(); // temp buffer
@@ -493,7 +487,7 @@ fn parse_comments(src: Option<&str>, trailing: bool) -> Option<Vec<Comment>> {
 
     // Reset on each newline
     let mut comment_line = false;
-    let mut empty = true;
+    let mut only_space = true;
     let mut prev_char = '\0';
 
     // Reset the tracking variables
@@ -509,58 +503,58 @@ fn parse_comments(src: Option<&str>, trailing: bool) -> Option<Vec<Comment>> {
     while let Some(mut char) = iter.next() {
         line.push(char);
 
+        // Drop carriage returns in favor of newlines
+        if char == '\r' {
+            line.pop();
+            line.push('\n');
+        } else if prev_char == '\r' && char == '\n' {
+            line.pop();
+            continue;
+        }
+
+        // Newline signals action needs taken
         if char == '\n' {
-            // Drop carriage returns in favor of newlines
-            if prev_char == '\r' {
-                line.pop();
-            }
-
-            // It is expected to get a single newline after source which we need to drop
-            if !single_expected_newline && empty && trailing {
-                comments.push(Comment::Break);
-                single_expected_newline = true;
-                reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
+            // Block comment has not be closed yet, so everything is part of it
+            if comment_block {
                 continue;
-            }
 
-            // Only allow a single empty line consecutively regardless of context
-            if empty {
-                if prev_empty_line {
-                    reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
-                    continue;
+            // Detect comments first
+            } else if comment_line {
+                line.pop(); // drop newline
+
+                // A trailing comment won't ever have a preceding comment as the preceding string.
+                // The some param indicates we have some source code preceding.
+                if comments.is_empty() && some {
+                    comments.push(Comment::line_trailing(&line));
+                    comments.push(Comment::Break);
+                    single_expected_newline = true;
                 } else {
+                    comments.push(Comment::line(&line));
+                }
+            } else if only_space {
+                // It is expected to get a single newline after source which we need to drop
+                if !single_expected_newline && some {
+                    comments.push(Comment::Break);
+                    single_expected_newline = true;
+
+                // Only allow a single empty line consecutively regardless of context
+                } else if !prev_empty_line {
                     prev_empty_line = true;
+                    comments.push(Comment::Empty);
                 }
             } else {
                 prev_empty_line = false;
             }
 
-            // Block comment has not be closed yet, so everything is part of it
-            if comment_block {
-                continue;
-            }
-
-            // Store the comment
-            if empty || comment_line {
-                line.pop(); // drop newline
-
-                if empty {
-                    comments.push(Comment::Empty)
-                } else {
-                    // A trailing comment won't ever have a preceding comment as the preceding string
-                    // is source code if we actually have some preceding source code.
-                    if comments.is_empty() && trailing {
-                        comments.push(Comment::line_trailing(&line));
-                    } else {
-                        comments.push(Comment::line(&line));
-                    }
-                };
-            }
-
-            reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
+            reset(
+                &mut line,
+                &mut only_space,
+                &mut comment_line,
+                &mut prev_char,
+            );
             continue;
         } else if char != ' ' {
-            empty = false;
+            only_space = false;
             prev_empty_line = false;
 
             // Block comments encompass everything until the end
@@ -584,7 +578,12 @@ fn parse_comments(src: Option<&str>, trailing: bool) -> Option<Vec<Comment>> {
                     } else {
                         comments.push(Comment::block_inline(&line));
                     }
-                    reset(&mut line, &mut empty, &mut comment_line, &mut prev_char);
+                    reset(
+                        &mut line,
+                        &mut only_space,
+                        &mut comment_line,
+                        &mut prev_char,
+                    );
                 }
             } else {
                 // Check for doc comments first
@@ -689,7 +688,6 @@ mod tests {
         fn comments_after<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comments_before<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comment_count(&self) -> usize;
-        fn recursive_count(&self) -> usize;
         fn print(&self);
     }
     impl<I: Iterator<Item = TokenTree> + Clone> TokensExt for I {
@@ -791,22 +789,6 @@ mod tests {
         }
 
         /// Recursively count all tokens
-        fn recursive_count(&self) -> usize {
-            let mut iter = self.clone();
-            fn recurse(iter: &mut dyn Iterator<Item = TokenTree>) -> usize {
-                let mut count = 0;
-                for token in iter {
-                    count += 1;
-                    if let TokenTree::Group(group) = token {
-                        count += recurse(&mut group.stream().into_iter());
-                    }
-                }
-                count
-            }
-            recurse(&mut iter)
-        }
-
-        /// Recursively count all tokens
         fn print(&self) {
             let mut iter = self.clone();
             fn recurse(iter: &mut dyn Iterator<Item = TokenTree>) {
@@ -832,6 +814,8 @@ mod tests {
             }
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
         assert_eq!(tokens.comment_count(), 1);
         let group = tokens.get((0, 9)).as_group();
         let tokens = group.stream().into_iter();
@@ -860,12 +844,14 @@ mod tests {
         let source = indoc! {r#"
             struct Foo {
                 a: i32, // A field
+
                 b: i32, // B field
             }
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
-        assert_eq!(tokens.comment_count(), 2);
+
+        assert_eq!(tokens.comment_count(), 3);
         let group = tokens.get((0, 11)).as_group();
         let tokens = group.stream().into_iter();
         assert_eq!(
@@ -873,8 +859,8 @@ mod tests {
             vec![Comment::line_trailing(" A field".into())]
         );
         assert_eq!(
-            tokens.comments_before((2, 4)),
-            vec![Comment::line_trailing(" B field".into())]
+            tokens.comments_before((3, 4)),
+            vec![Comment::line_trailing(" B field".into()), Comment::Empty]
         );
     }
 

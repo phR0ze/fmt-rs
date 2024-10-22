@@ -50,6 +50,7 @@ impl Engine {
         self.expr(&item.expr);
         self.scan_string(";");
         self.scan_end();
+        self.scan_trailing_comment(&item.attrs);
         self.scan_hardbreak();
     }
 
@@ -62,10 +63,12 @@ impl Engine {
         self.generics(&item.generics);
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
+        self.scan_trailing_comment(&item.attrs);
         self.hardbreak_if_nonempty();
         for variant in &item.variants {
             self.variant(variant);
             self.scan_string(",");
+            self.scan_trailing_comment(&variant.attrs);
             self.scan_hardbreak();
         }
         self.offset(-self.config.indent);
@@ -94,6 +97,7 @@ impl Engine {
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
         self.scan_string("{");
+        self.scan_trailing_comment(&item.attrs);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
         for stmt in &item.block.stmts {
@@ -151,6 +155,7 @@ impl Engine {
         self.scan_end();
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
+        self.scan_trailing_comment(&item.attrs);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
         for impl_item in &item.items {
@@ -180,6 +185,7 @@ impl Engine {
         self.ident(&item.ident);
         if let Some((_brace, items)) = &item.content {
             self.scan_string(" {");
+            self.scan_trailing_comment(&item.attrs);
             self.hardbreak_if_nonempty();
             self.inner_attrs(&item.attrs);
             for item in items {
@@ -190,6 +196,7 @@ impl Engine {
             self.scan_string("}");
         } else {
             self.scan_string(";");
+            self.scan_trailing_comment(&item.attrs);
             self.scan_end();
         }
         self.scan_hardbreak();
@@ -209,51 +216,32 @@ impl Engine {
         self.expr(&item.expr);
         self.scan_string(";");
         self.scan_end();
+        self.scan_trailing_comment(&item.attrs);
         self.scan_hardbreak();
     }
 
     fn item_struct(&mut self, item: &ItemStruct) {
-        // Print out any outer attributes e.g. comments
         self.outer_attrs(&item.attrs);
-
-        // Don't print DUMMY value that was used to trick syn for comments
-        if item.ident == DUMMY_STRUCT {
-            return;
-        }
-
         self.scan_begin_consistent(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("struct ");
         self.ident(&item.ident);
         self.generics(&item.generics);
         match &item.fields {
+            // With fields
             Fields::Named(fields) => {
                 self.where_clause_for_body(&item.generics.where_clause);
                 self.scan_string("{");
+                self.scan_trailing_comment(&item.attrs);
                 self.hardbreak_if_nonempty();
 
-                let mut iter = fields.named.iter().peekable();
-                while let Some(field) = iter.next() {
-                    // Don't print DUMMY fields used for trailing comments
-                    if let Some(ident) = field.ident.as_ref() {
-                        if ident == DUMMY_FIELD {
-                            continue;
-                        }
-                    }
-
-                    // Scan the field portion
+                for field in fields.named.iter() {
                     self.scan_field(field);
                     self.scan_string(",");
-
-                    // Look ahead to print trailing comments from the next field's outer attributes
-                    let trailing = match iter.peek() {
-                        Some(next) => self.scan_trailing_comment(&next.attrs),
-                        None => false,
-                    };
-                    if !trailing {
-                        self.scan_hardbreak();
-                    }
+                    self.scan_trailing_comment(&field.attrs);
+                    self.scan_hardbreak();
                 }
+
                 self.offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
@@ -263,9 +251,12 @@ impl Engine {
                 self.where_clause_semi(&item.generics.where_clause);
                 self.scan_end();
             }
+
+            // Unit only e.g. 'struct Unit;'
             Fields::Unit => {
                 self.where_clause_semi(&item.generics.where_clause);
                 self.scan_end();
+                self.scan_trailing_comment(&item.attrs);
             }
         }
         self.scan_hardbreak();
@@ -294,6 +285,7 @@ impl Engine {
         }
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
+        self.scan_trailing_comment(&item.attrs);
         self.hardbreak_if_nonempty();
         self.inner_attrs(&item.attrs);
         for trait_item in &item.items {
@@ -972,6 +964,7 @@ impl Engine {
         }
         self.scan_string(";");
         self.scan_end();
+        self.scan_trailing_comment(&trait_item.attrs);
         self.scan_hardbreak();
     }
 
@@ -982,6 +975,7 @@ impl Engine {
         if let Some(block) = &trait_item.default {
             self.where_clause_for_body(&trait_item.sig.generics.where_clause);
             self.scan_string("{");
+            self.scan_trailing_comment(&trait_item.attrs);
             self.hardbreak_if_nonempty();
             self.inner_attrs(&trait_item.attrs);
             for stmt in &block.stmts {
@@ -993,6 +987,7 @@ impl Engine {
         } else {
             self.where_clause_semi(&trait_item.sig.generics.where_clause);
             self.scan_end();
+            self.scan_trailing_comment(&trait_item.attrs);
         }
         self.scan_hardbreak();
     }
@@ -1021,6 +1016,7 @@ impl Engine {
         }
         self.where_clause_oneline_semi(&trait_item.generics.where_clause);
         self.scan_end();
+        self.scan_trailing_comment(&trait_item.attrs);
         self.scan_hardbreak();
     }
 

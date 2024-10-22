@@ -35,7 +35,6 @@ impl Engine {
                 trim_trailing_spaces(&mut comment);
                 self.scan_string("//");
                 self.scan_string(comment);
-                self.scan_hardbreak();
                 return true;
             }
         }
@@ -253,6 +252,37 @@ fn value_of_attribute(requested: &str, attr: &Attribute) -> Option<String> {
         Lit::Str(string) => Some(string.value()),
         _ => None,
     }
+}
+
+/// Debugging function to print the attributes
+#[allow(dead_code)]
+#[cfg(test)]
+fn debug_print_attrs(attrs: &[Attribute]) {
+    for attr in attrs {
+        debug_print_attr(attr);
+    }
+}
+
+/// Debugging function to print the attributes
+#[allow(dead_code)]
+#[cfg(test)]
+fn debug_print_attr(attr: &Attribute) {
+    let style = match attr.style {
+        AttrStyle::Outer => "Outer",
+        _ => "Inner",
+    };
+    if let Meta::NameValue(meta) = &attr.meta {
+        if let Expr::Lit(expr) = &meta.value {
+            if let Lit::Str(lit) = &expr.lit {
+                println!(
+                    "{}: {}, {}",
+                    style,
+                    meta.path.get_ident().unwrap(),
+                    lit.value()
+                );
+            }
+        }
+    };
 }
 
 pub fn has_outer(attrs: &[Attribute]) -> bool {
