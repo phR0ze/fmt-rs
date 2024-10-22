@@ -146,7 +146,7 @@ impl Engine {
             if negative_polarity.is_some() {
                 self.scan_string("!");
             }
-            self.path(path, PathKind::Type);
+            self.scan_path(path, PathKind::Type);
             self.scan_space();
             self.scan_string("for ");
         }

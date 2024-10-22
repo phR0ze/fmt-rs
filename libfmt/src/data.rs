@@ -72,7 +72,7 @@ impl Engine {
         if !omit_in {
             self.scan_string("in ");
         }
-        self.path(&vis.path, PathKind::Simple);
+        self.scan_path(&vis.path, PathKind::Simple);
         self.scan_string(") ");
     }
 }

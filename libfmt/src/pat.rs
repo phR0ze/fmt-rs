@@ -108,7 +108,7 @@ impl Engine {
     fn pat_struct(&mut self, pat: &PatStruct) {
         self.outer_attrs(&pat.attrs);
         self.scan_begin_consistent(self.config.indent);
-        self.path(&pat.path, PathKind::Expr);
+        self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string(" {");
         self.space_if_nonempty();
         for field in pat.fields.iter().delimited() {
@@ -147,7 +147,7 @@ impl Engine {
 
     fn pat_tuple_struct(&mut self, pat: &PatTupleStruct) {
         self.outer_attrs(&pat.attrs);
-        self.path(&pat.path, PathKind::Expr);
+        self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string("(");
         self.scan_begin_consistent(self.config.indent);
         self.zerobreak();

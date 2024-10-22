@@ -19,7 +19,7 @@ impl Engine {
         }
 
         // Scan the macro name and path e.g. `foo` or `foo::bar`
-        self.path(&mac.path, PathKind::Simple);
+        self.scan_path(&mac.path, PathKind::Simple);
 
         // Scan the macro ! symbol
         self.scan_string("!");

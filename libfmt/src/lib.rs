@@ -70,6 +70,24 @@ mod tests {
     use indoc::indoc;
     use tracing_test::traced_test;
 
+    #[test]
+    fn test_intelligent_wrapping_for_params() {
+        let source = indoc! {r#"
+            println!("1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}", "1", "2", "3", "4", "5", "6", "7", "8", "9");
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            // println!(
+            //     "1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}", "1", "2", "3", "4",
+            //     "5", "6", "7", "8", "9"
+            // );
+            indoc! {r#"
+                println!("1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}",
+                    "1", "2", "3", "4", "5", "6", "7", "8", "9");
+            "#},
+        );
+    }
+
     // // // Rustfmt will align the parameters vertically
     // // // libfmt will align the parameters horizontally and wrap intelligently
     // // #[test]

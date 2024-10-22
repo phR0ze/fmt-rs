@@ -18,7 +18,7 @@ pub enum PathKind {
 
 impl Engine {
     /// Trait, Macro, etc. name
-    pub fn path(&mut self, path: &syn::Path, kind: PathKind) {
+    pub fn scan_path(&mut self, path: &syn::Path, kind: PathKind) {
         assert!(!path.segments.is_empty());
         for segment in path.segments.iter().delimited() {
             if !segment.is_first || path.leading_colon.is_some() {
@@ -175,7 +175,7 @@ impl Engine {
         let qself = if let Some(qself) = qself {
             qself
         } else {
-            self.path(path, kind);
+            self.scan_path(path, kind);
             return;
         };
 

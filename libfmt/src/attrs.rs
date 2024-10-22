@@ -107,14 +107,14 @@ impl Engine {
 
     fn meta(&mut self, meta: &Meta) {
         match meta {
-            Meta::Path(path) => self.path(path, PathKind::Simple),
+            Meta::Path(path) => self.scan_path(path, PathKind::Simple),
             Meta::List(meta) => self.meta_list(meta),
             Meta::NameValue(meta) => self.meta_name_value(meta),
         }
     }
 
     fn meta_list(&mut self, meta: &MetaList) {
-        self.path(&meta.path, PathKind::Simple);
+        self.scan_path(&meta.path, PathKind::Simple);
         let delimiter = match meta.delimiter {
             MacroDelimiter::Paren(_) => Delimiter::Parenthesis,
             MacroDelimiter::Brace(_) => Delimiter::Brace,
@@ -125,7 +125,7 @@ impl Engine {
     }
 
     fn meta_name_value(&mut self, meta: &MetaNameValue) {
-        self.path(&meta.path, PathKind::Simple);
+        self.scan_path(&meta.path, PathKind::Simple);
         self.scan_string(" = ");
         self.expr(&meta.value);
     }
