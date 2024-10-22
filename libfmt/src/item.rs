@@ -1,7 +1,6 @@
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::{attrs, DUMMY_STRUCT};
-use crate::{engine::Engine, DUMMY_FIELD};
 use proc_macro2::TokenStream;
 use syn::{
     Fields, FnArg, ForeignItem, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
@@ -171,6 +170,7 @@ impl Engine {
         self.outer_attrs(&item.attrs);
         let semicolon = true;
         self.mac(&item.mac, item.ident.as_ref(), semicolon);
+        self.scan_trailing_comment(&item.attrs);
         self.scan_hardbreak();
     }
 

@@ -11,3 +11,4 @@
       ```
 
 ## Completed
+* [x] Initial support for comments

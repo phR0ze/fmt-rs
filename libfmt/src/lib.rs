@@ -23,11 +23,6 @@ use model::Config;
 use std::path::Path;
 use tracing::trace;
 
-/// Dummy value to use when syn requires a source token
-pub(crate) const DUMMY_STRUCT: &str = "libfmt_dummy_struct";
-pub(crate) const DUMMY_FIELD: &str = "libfmt_dummy_field";
-pub(crate) const DUMMY_VARIANT: &str = "libfmt_dummy_variant";
-
 // Re-export the public API
 pub use error::{Error, Result};
 
@@ -158,37 +153,18 @@ mod tests {
     //     );
     // }
 
-    // #[test]
-    // fn test_comment_inline_enum() {
-    //     let source = indoc! {r#"
-    //         enum Foo {
-    //             Bar1, // A field
-    //             Bar2, // A field
-    //         }
-    //     "#};
-    //     assert_eq!(
-    //         format_str(None, source).unwrap(),
-    //         indoc! {r#"
-    //             enum Foo {
-    //                 Bar1, // A field
-    //                 Bar2, // A field
-    //             }
-    //         "#},
-    //     );
-    // }
-
-    // #[test]
-    // fn test_comment_trailing_statements() {
-    //     let source = indoc! {r#"
-    //         println!("Hello"); // Hello
-    //     "#};
-    //     assert_eq!(
-    //         format_str(None, source).unwrap(),
-    //         indoc! {r#"
-    //             println!("Hello"); // Hello
-    //         "#},
-    //     );
-    // }
+    #[test]
+    fn test_comment_trailing_item_macro() {
+        let source = indoc! {r#"
+            println!("Hello"); // Hello
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                println!("Hello"); // Hello
+            "#},
+        );
+    }
 
     #[test]
     fn test_comment_trailing_item_trait() {
