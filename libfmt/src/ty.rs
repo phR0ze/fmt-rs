@@ -88,7 +88,7 @@ impl Engine {
 
     fn type_macro(&mut self, ty: &TypeMacro) {
         let semicolon = false;
-        self.mac(&ty.mac, None, semicolon);
+        self.scan_mac(&ty.mac, None, semicolon);
     }
 
     fn type_never(&mut self, ty: &TypeNever) {

@@ -72,7 +72,7 @@ impl Engine {
             Stmt::Macro(stmt) => {
                 self.outer_attrs(&stmt.attrs);
                 let semicolon = true;
-                self.mac(&stmt.mac, None, semicolon);
+                self.scan_mac(&stmt.mac, None, semicolon);
                 self.scan_hardbreak();
             }
         }

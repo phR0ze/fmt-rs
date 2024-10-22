@@ -487,7 +487,7 @@ impl Engine {
     pub fn expr_macro(&mut self, expr: &ExprMacro) {
         self.outer_attrs(&expr.attrs);
         let semicolon = false;
-        self.mac(&expr.mac, None, semicolon);
+        self.scan_mac(&expr.mac, None, semicolon);
     }
 
     fn expr_match(&mut self, expr: &ExprMatch) {

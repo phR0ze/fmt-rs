@@ -169,7 +169,7 @@ impl Engine {
     fn item_macro(&mut self, item: &ItemMacro) {
         self.outer_attrs(&item.attrs);
         let semicolon = true;
-        self.mac(&item.mac, item.ident.as_ref(), semicolon);
+        self.scan_mac(&item.mac, item.ident.as_ref(), semicolon);
         self.scan_trailing_comment(&item.attrs);
         self.scan_hardbreak();
     }
@@ -846,7 +846,7 @@ impl Engine {
     fn foreign_item_macro(&mut self, foreign_item: &ForeignItemMacro) {
         self.outer_attrs(&foreign_item.attrs);
         let semicolon = true;
-        self.mac(&foreign_item.mac, None, semicolon);
+        self.scan_mac(&foreign_item.mac, None, semicolon);
         self.scan_hardbreak();
     }
 
@@ -1023,7 +1023,7 @@ impl Engine {
     fn trait_item_macro(&mut self, trait_item: &TraitItemMacro) {
         self.outer_attrs(&trait_item.attrs);
         let semicolon = true;
-        self.mac(&trait_item.mac, None, semicolon);
+        self.scan_mac(&trait_item.mac, None, semicolon);
         self.scan_hardbreak();
     }
 
@@ -1207,7 +1207,7 @@ impl Engine {
     fn impl_item_macro(&mut self, impl_item: &ImplItemMacro) {
         self.outer_attrs(&impl_item.attrs);
         let semicolon = true;
-        self.mac(&impl_item.mac, None, semicolon);
+        self.scan_mac(&impl_item.mac, None, semicolon);
         self.scan_hardbreak();
     }
 

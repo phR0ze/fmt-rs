@@ -6,7 +6,7 @@ use syn::{Ident, Macro, MacroDelimiter};
 
 impl Engine {
     /// Format a macro invocation or definition.
-    pub fn mac(&mut self, mac: &Macro, ident: Option<&Ident>, semicolon: bool) {
+    pub fn scan_mac(&mut self, mac: &Macro, ident: Option<&Ident>, semicolon: bool) {
         if mac.path.is_ident("macro_rules") {
             if let Some(ident) = ident {
                 self.macro_rules(ident, &mac.tokens);
@@ -31,23 +31,19 @@ impl Engine {
         }
 
         // Compute open, close delimiters and break function
-        let (open, close, delimiter_break) = match mac.delimiter {
+        let (open_delimiter, close_delimiter, delimiter_break) = match mac.delimiter {
             MacroDelimiter::Paren(_) => ("(", ")", Self::zerobreak as fn(&mut Self)),
             MacroDelimiter::Brace(_) => (" {", "}", Self::scan_hardbreak as fn(&mut Self)),
             MacroDelimiter::Bracket(_) => ("[", "]", Self::zerobreak as fn(&mut Self)),
         };
 
         // Scan the open delimiter
-        self.scan_string(open);
+        self.scan_string(open_delimiter);
 
         // Scan the macro body tokens
         if !mac.tokens.is_empty() {
             self.scan_begin_consistent(self.config.indent);
-
-            // libfmt: control brace_style for macro
-            // if !INVOKATION_BRACE_STYLE_SAME_LINE {
             delimiter_break(self);
-            //}
 
             // Scan the macro body
             self.scan_begin_inconsistent(0);
@@ -65,7 +61,7 @@ impl Engine {
         }
 
         // Scan the macro close delimiter
-        self.scan_string(close);
+        self.scan_string(close_delimiter);
 
         if semicolon {
             match mac.delimiter {
