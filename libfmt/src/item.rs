@@ -383,6 +383,431 @@ impl Engine {
         self.scan_hardbreak();
     }
 
+    fn use_tree(&mut self, use_tree: &UseTree) {
+        match use_tree {
+            UseTree::Path(use_path) => self.use_path(use_path),
+            UseTree::Name(use_name) => self.use_name(use_name),
+            UseTree::Rename(use_rename) => self.use_rename(use_rename),
+            UseTree::Glob(use_glob) => self.use_glob(use_glob),
+            UseTree::Group(use_group) => self.use_group(use_group),
+        }
+    }
+
+    fn use_path(&mut self, use_path: &UsePath) {
+        self.ident(&use_path.ident);
+        self.scan_string("::");
+        self.use_tree(&use_path.tree);
+    }
+
+    fn use_name(&mut self, use_name: &UseName) {
+        self.ident(&use_name.ident);
+    }
+
+    fn use_rename(&mut self, use_rename: &UseRename) {
+        self.ident(&use_rename.ident);
+        self.scan_string(" as ");
+        self.ident(&use_rename.rename);
+    }
+
+    fn use_glob(&mut self, use_glob: &UseGlob) {
+        let _ = use_glob;
+        self.scan_string("*");
+    }
+
+    fn use_group(&mut self, use_group: &UseGroup) {
+        if use_group.items.is_empty() {
+            self.scan_string("{}");
+        } else if use_group.items.len() == 1
+            && match &use_group.items[0] {
+                UseTree::Rename(use_rename) => use_rename.ident != "self",
+                _ => true,
+            }
+        {
+            self.use_tree(&use_group.items[0]);
+        } else {
+            self.scan_begin_consistent(self.config.indent);
+            self.scan_string("{");
+            self.zerobreak();
+            self.scan_begin_inconsistent(0);
+            for use_tree in use_group.items.iter().delimited() {
+                self.use_tree(&use_tree);
+                if !use_tree.is_last {
+                    self.scan_string(",");
+                    let mut use_tree = *use_tree;
+                    while let UseTree::Path(use_path) = use_tree {
+                        use_tree = &use_path.tree;
+                    }
+                    if let UseTree::Group(_) = use_tree {
+                        self.scan_hardbreak();
+                    } else {
+                        self.scan_space();
+                    }
+                }
+            }
+            self.scan_end();
+            self.trailing_comma(true);
+            self.offset(-self.config.indent);
+            self.scan_string("}");
+            self.scan_end();
+        }
+    }
+
+    fn foreign_item(&mut self, foreign_item: &ForeignItem) {
+        match foreign_item {
+            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
+            ForeignItem::Fn(item) => self.foreign_item_fn(item),
+            ForeignItem::Static(item) => self.foreign_item_static(item),
+            ForeignItem::Type(item) => self.foreign_item_type(item),
+            ForeignItem::Macro(item) => self.foreign_item_macro(item),
+            ForeignItem::Verbatim(item) => self.foreign_item_verbatim(item),
+            _ => unimplemented!("unknown ForeignItem"),
+        }
+    }
+
+    fn foreign_item_fn(&mut self, foreign_item: &ForeignItemFn) {
+        self.outer_attrs(&foreign_item.attrs);
+        self.scan_begin_consistent(self.config.indent);
+        self.visibility(&foreign_item.vis);
+        self.signature(&foreign_item.sig);
+        self.where_clause_semi(&foreign_item.sig.generics.where_clause);
+        self.scan_end();
+        self.scan_hardbreak();
+    }
+
+    fn foreign_item_static(&mut self, foreign_item: &ForeignItemStatic) {
+        self.outer_attrs(&foreign_item.attrs);
+        self.scan_begin_consistent(0);
+        self.visibility(&foreign_item.vis);
+        self.scan_string("static ");
+        self.static_mutability(&foreign_item.mutability);
+        self.ident(&foreign_item.ident);
+        self.scan_string(": ");
+        self.ty(&foreign_item.ty);
+        self.scan_string(";");
+        self.scan_end();
+        self.scan_hardbreak();
+    }
+
+    fn foreign_item_type(&mut self, foreign_item: &ForeignItemType) {
+        self.outer_attrs(&foreign_item.attrs);
+        self.scan_begin_consistent(0);
+        self.visibility(&foreign_item.vis);
+        self.scan_string("type ");
+        self.ident(&foreign_item.ident);
+        self.generics(&foreign_item.generics);
+        self.scan_string(";");
+        self.scan_end();
+        self.scan_hardbreak();
+    }
+
+    fn foreign_item_macro(&mut self, foreign_item: &ForeignItemMacro) {
+        self.outer_attrs(&foreign_item.attrs);
+        let semicolon = true;
+        self.scan_mac(&foreign_item.mac, None, semicolon);
+        self.scan_hardbreak();
+    }
+
+    #[cfg(not(feature = "verbatim"))]
+    fn foreign_item_verbatim(&mut self, foreign_item: &TokenStream) {
+        if !foreign_item.is_empty() {
+            unimplemented!("ForeignItem::Verbatim `{}`", foreign_item);
+        }
+        self.scan_hardbreak();
+    }
+
+    fn trait_item(&mut self, trait_item: &TraitItem) {
+        match trait_item {
+            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
+            TraitItem::Const(item) => self.trait_item_const(item),
+            TraitItem::Fn(item) => self.trait_item_fn(item),
+            TraitItem::Type(item) => self.trait_item_type(item),
+            TraitItem::Macro(item) => self.trait_item_macro(item),
+            TraitItem::Verbatim(item) => self.trait_item_verbatim(item),
+            _ => unimplemented!("unknown TraitItem"),
+        }
+    }
+
+    fn trait_item_const(&mut self, trait_item: &TraitItemConst) {
+        self.outer_attrs(&trait_item.attrs);
+        self.scan_begin_consistent(0);
+        self.scan_string("const ");
+        self.ident(&trait_item.ident);
+        self.generics(&trait_item.generics);
+        self.scan_string(": ");
+        self.ty(&trait_item.ty);
+        if let Some((_eq_token, default)) = &trait_item.default {
+            self.scan_string(" = ");
+            self.neverbreak();
+            self.expr(default);
+        }
+        self.scan_string(";");
+        self.scan_end();
+        self.scan_trailing_comment(&trait_item.attrs);
+        self.scan_hardbreak();
+    }
+
+    fn trait_item_fn(&mut self, trait_item: &TraitItemFn) {
+        self.outer_attrs(&trait_item.attrs);
+        self.scan_begin_consistent(self.config.indent);
+        self.signature(&trait_item.sig);
+        if let Some(block) = &trait_item.default {
+            self.where_clause_for_body(&trait_item.sig.generics.where_clause);
+            self.scan_string("{");
+            self.scan_trailing_comment(&trait_item.attrs);
+            self.hardbreak_if_nonempty();
+            self.inner_attrs(&trait_item.attrs);
+            for stmt in &block.stmts {
+                self.stmt(stmt);
+            }
+            self.offset(-self.config.indent);
+            self.scan_end();
+            self.scan_string("}");
+        } else {
+            self.where_clause_semi(&trait_item.sig.generics.where_clause);
+            self.scan_end();
+            self.scan_trailing_comment(&trait_item.attrs);
+        }
+        self.scan_hardbreak();
+    }
+
+    fn trait_item_type(&mut self, trait_item: &TraitItemType) {
+        self.outer_attrs(&trait_item.attrs);
+        self.scan_begin_consistent(self.config.indent);
+        self.scan_string("type ");
+        self.ident(&trait_item.ident);
+        self.generics(&trait_item.generics);
+        for bound in trait_item.bounds.iter().delimited() {
+            if bound.is_first {
+                self.scan_string(": ");
+            } else {
+                self.scan_space();
+                self.scan_string("+ ");
+            }
+            self.type_param_bound(&bound);
+        }
+        if let Some((_eq_token, default)) = &trait_item.default {
+            self.scan_string(" = ");
+            self.neverbreak();
+            self.scan_begin_inconsistent(-self.config.indent);
+            self.ty(default);
+            self.scan_end();
+        }
+        self.where_clause_oneline_semi(&trait_item.generics.where_clause);
+        self.scan_end();
+        self.scan_trailing_comment(&trait_item.attrs);
+        self.scan_hardbreak();
+    }
+
+    fn trait_item_macro(&mut self, trait_item: &TraitItemMacro) {
+        self.outer_attrs(&trait_item.attrs);
+        let semicolon = true;
+        self.scan_mac(&trait_item.mac, None, semicolon);
+        self.scan_hardbreak();
+    }
+
+    #[cfg(not(feature = "verbatim"))]
+    fn trait_item_verbatim(&mut self, trait_item: &TokenStream) {
+        if !trait_item.is_empty() {
+            unimplemented!("TraitItem::Verbatim `{}`", trait_item);
+        }
+        self.scan_hardbreak();
+    }
+
+    fn impl_item(&mut self, impl_item: &ImplItem) {
+        match impl_item {
+            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
+            ImplItem::Const(item) => self.impl_item_const(item),
+            ImplItem::Fn(item) => self.impl_item_fn(item),
+            ImplItem::Type(item) => self.impl_item_type(item),
+            ImplItem::Macro(item) => self.impl_item_macro(item),
+            ImplItem::Verbatim(item) => self.impl_item_verbatim(item),
+            _ => unimplemented!("unknown ImplItem"),
+        }
+    }
+
+    fn impl_item_const(&mut self, impl_item: &ImplItemConst) {
+        self.outer_attrs(&impl_item.attrs);
+        self.scan_begin_consistent(0);
+        self.visibility(&impl_item.vis);
+        if impl_item.defaultness.is_some() {
+            self.scan_string("default ");
+        }
+        self.scan_string("const ");
+        self.ident(&impl_item.ident);
+        self.generics(&impl_item.generics);
+        self.scan_string(": ");
+        self.ty(&impl_item.ty);
+        self.scan_string(" = ");
+        self.neverbreak();
+        self.expr(&impl_item.expr);
+        self.scan_string(";");
+        self.scan_end();
+        self.scan_hardbreak();
+    }
+
+    fn impl_item_fn(&mut self, impl_item: &ImplItemFn) {
+        self.outer_attrs(&impl_item.attrs);
+        self.scan_begin_consistent(self.config.indent);
+        self.visibility(&impl_item.vis);
+        if impl_item.defaultness.is_some() {
+            self.scan_string("default ");
+        }
+        self.signature(&impl_item.sig);
+        self.where_clause_for_body(&impl_item.sig.generics.where_clause);
+
+        // Want this on the next line if the prior line was a smart wrap
+        self.scan_string("{");
+
+        self.hardbreak_if_nonempty();
+        self.inner_attrs(&impl_item.attrs);
+        for stmt in &impl_item.block.stmts {
+            self.stmt(stmt);
+        }
+        self.offset(-self.config.indent);
+        self.scan_end();
+        self.scan_string("}");
+        self.scan_hardbreak();
+    }
+
+    fn impl_item_type(&mut self, impl_item: &ImplItemType) {
+        self.outer_attrs(&impl_item.attrs);
+        self.scan_begin_consistent(self.config.indent);
+        self.visibility(&impl_item.vis);
+        if impl_item.defaultness.is_some() {
+            self.scan_string("default ");
+        }
+        self.scan_string("type ");
+        self.ident(&impl_item.ident);
+        self.generics(&impl_item.generics);
+        self.scan_string(" = ");
+        self.neverbreak();
+        self.scan_begin_inconsistent(-self.config.indent);
+        self.ty(&impl_item.ty);
+        self.scan_end();
+        self.where_clause_oneline_semi(&impl_item.generics.where_clause);
+        self.scan_end();
+        self.scan_hardbreak();
+    }
+
+    fn impl_item_macro(&mut self, impl_item: &ImplItemMacro) {
+        self.outer_attrs(&impl_item.attrs);
+        let semicolon = true;
+        self.scan_mac(&impl_item.mac, None, semicolon);
+        self.scan_hardbreak();
+    }
+
+    #[cfg(not(feature = "verbatim"))]
+    fn impl_item_verbatim(&mut self, impl_item: &TokenStream) {
+        if !impl_item.is_empty() {
+            unimplemented!("ImplItem::Verbatim `{}`", impl_item);
+        }
+        self.scan_hardbreak();
+    }
+
+    fn signature(&mut self, signature: &Signature) {
+        if signature.constness.is_some() {
+            self.scan_string("const ");
+        }
+        if signature.asyncness.is_some() {
+            self.scan_string("async ");
+        }
+        if signature.unsafety.is_some() {
+            self.scan_string("unsafe ");
+        }
+        if let Some(abi) = &signature.abi {
+            self.abi(abi);
+        }
+        self.scan_string("fn ");
+        self.ident(&signature.ident);
+        self.generics(&signature.generics);
+        self.scan_string("(");
+
+        // Signature params
+        self.neverbreak();
+        self.scan_begin_inconsistent(0);
+        // self.smart_wrap_body_begin();
+        //self.smart_wrap_zerobreak();
+        self.zerobreak();
+        for input in signature.inputs.iter().delimited() {
+            self.fn_arg(&input);
+            let is_last = input.is_last && signature.variadic.is_none();
+            self.trailing_comma(is_last);
+        }
+        if let Some(variadic) = &signature.variadic {
+            self.variadic(variadic);
+            //self.smart_wrap_zerobreak();
+            self.zerobreak();
+        }
+        self.offset(-self.config.indent);
+        //self.smart_wrap_body_end();
+        self.scan_end();
+
+        self.scan_string(")");
+        self.scan_begin_consistent(-self.config.indent);
+        self.return_type(&signature.output);
+        self.scan_end();
+    }
+
+    fn fn_arg(&mut self, fn_arg: &FnArg) {
+        match fn_arg {
+            FnArg::Receiver(receiver) => self.fn_arg_receiver(receiver),
+            FnArg::Typed(pat_type) => self.pat_type(pat_type),
+        }
+    }
+
+    fn fn_arg_receiver(&mut self, receiver: &Receiver) {
+        self.outer_attrs(&receiver.attrs);
+        if let Some((_ampersand, lifetime)) = &receiver.reference {
+            self.scan_string("&");
+            if let Some(lifetime) = lifetime {
+                self.lifetime(lifetime);
+                self.nbsp();
+            }
+        }
+        if receiver.mutability.is_some() {
+            self.scan_string("mut ");
+        }
+        self.scan_string("self");
+        if receiver.colon_token.is_some() {
+            self.scan_string(": ");
+            self.ty(&receiver.ty);
+        } else {
+            let consistent = match (&receiver.reference, &receiver.mutability, &*receiver.ty) {
+                (Some(_), mutability, Type::Reference(ty)) => {
+                    mutability.is_some() == ty.mutability.is_some()
+                        && match &*ty.elem {
+                            Type::Path(ty) => ty.qself.is_none() && ty.path.is_ident("Self"),
+                            _ => false,
+                        }
+                }
+                (None, _, Type::Path(ty)) => ty.qself.is_none() && ty.path.is_ident("Self"),
+                _ => false,
+            };
+            if !consistent {
+                self.scan_string(": ");
+                self.ty(&receiver.ty);
+            }
+        }
+    }
+
+    fn variadic(&mut self, variadic: &Variadic) {
+        self.outer_attrs(&variadic.attrs);
+        if let Some((pat, _colon)) = &variadic.pat {
+            self.pat(pat);
+            self.scan_string(": ");
+        }
+        self.scan_string("...");
+    }
+
+    fn static_mutability(&mut self, mutability: &StaticMutability) {
+        match mutability {
+            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
+            StaticMutability::Mut(_) => self.scan_string("mut "),
+            StaticMutability::None => {}
+            _ => unimplemented!("unknown StaticMutability"),
+        }
+    }
+
     #[cfg(feature = "verbatim")]
     fn item_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
@@ -731,139 +1156,6 @@ impl Engine {
             }
         }
     }
-
-    fn use_tree(&mut self, use_tree: &UseTree) {
-        match use_tree {
-            UseTree::Path(use_path) => self.use_path(use_path),
-            UseTree::Name(use_name) => self.use_name(use_name),
-            UseTree::Rename(use_rename) => self.use_rename(use_rename),
-            UseTree::Glob(use_glob) => self.use_glob(use_glob),
-            UseTree::Group(use_group) => self.use_group(use_group),
-        }
-    }
-
-    fn use_path(&mut self, use_path: &UsePath) {
-        self.ident(&use_path.ident);
-        self.scan_string("::");
-        self.use_tree(&use_path.tree);
-    }
-
-    fn use_name(&mut self, use_name: &UseName) {
-        self.ident(&use_name.ident);
-    }
-
-    fn use_rename(&mut self, use_rename: &UseRename) {
-        self.ident(&use_rename.ident);
-        self.scan_string(" as ");
-        self.ident(&use_rename.rename);
-    }
-
-    fn use_glob(&mut self, use_glob: &UseGlob) {
-        let _ = use_glob;
-        self.scan_string("*");
-    }
-
-    fn use_group(&mut self, use_group: &UseGroup) {
-        if use_group.items.is_empty() {
-            self.scan_string("{}");
-        } else if use_group.items.len() == 1
-            && match &use_group.items[0] {
-                UseTree::Rename(use_rename) => use_rename.ident != "self",
-                _ => true,
-            }
-        {
-            self.use_tree(&use_group.items[0]);
-        } else {
-            self.scan_begin_consistent(self.config.indent);
-            self.scan_string("{");
-            self.zerobreak();
-            self.scan_begin_inconsistent(0);
-            for use_tree in use_group.items.iter().delimited() {
-                self.use_tree(&use_tree);
-                if !use_tree.is_last {
-                    self.scan_string(",");
-                    let mut use_tree = *use_tree;
-                    while let UseTree::Path(use_path) = use_tree {
-                        use_tree = &use_path.tree;
-                    }
-                    if let UseTree::Group(_) = use_tree {
-                        self.scan_hardbreak();
-                    } else {
-                        self.scan_space();
-                    }
-                }
-            }
-            self.scan_end();
-            self.trailing_comma(true);
-            self.offset(-self.config.indent);
-            self.scan_string("}");
-            self.scan_end();
-        }
-    }
-
-    fn foreign_item(&mut self, foreign_item: &ForeignItem) {
-        match foreign_item {
-            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-            ForeignItem::Fn(item) => self.foreign_item_fn(item),
-            ForeignItem::Static(item) => self.foreign_item_static(item),
-            ForeignItem::Type(item) => self.foreign_item_type(item),
-            ForeignItem::Macro(item) => self.foreign_item_macro(item),
-            ForeignItem::Verbatim(item) => self.foreign_item_verbatim(item),
-            _ => unimplemented!("unknown ForeignItem"),
-        }
-    }
-
-    fn foreign_item_fn(&mut self, foreign_item: &ForeignItemFn) {
-        self.outer_attrs(&foreign_item.attrs);
-        self.scan_begin_consistent(self.config.indent);
-        self.visibility(&foreign_item.vis);
-        self.signature(&foreign_item.sig);
-        self.where_clause_semi(&foreign_item.sig.generics.where_clause);
-        self.scan_end();
-        self.scan_hardbreak();
-    }
-
-    fn foreign_item_static(&mut self, foreign_item: &ForeignItemStatic) {
-        self.outer_attrs(&foreign_item.attrs);
-        self.scan_begin_consistent(0);
-        self.visibility(&foreign_item.vis);
-        self.scan_string("static ");
-        self.static_mutability(&foreign_item.mutability);
-        self.ident(&foreign_item.ident);
-        self.scan_string(": ");
-        self.ty(&foreign_item.ty);
-        self.scan_string(";");
-        self.scan_end();
-        self.scan_hardbreak();
-    }
-
-    fn foreign_item_type(&mut self, foreign_item: &ForeignItemType) {
-        self.outer_attrs(&foreign_item.attrs);
-        self.scan_begin_consistent(0);
-        self.visibility(&foreign_item.vis);
-        self.scan_string("type ");
-        self.ident(&foreign_item.ident);
-        self.generics(&foreign_item.generics);
-        self.scan_string(";");
-        self.scan_end();
-        self.scan_hardbreak();
-    }
-
-    fn foreign_item_macro(&mut self, foreign_item: &ForeignItemMacro) {
-        self.outer_attrs(&foreign_item.attrs);
-        let semicolon = true;
-        self.scan_mac(&foreign_item.mac, None, semicolon);
-        self.scan_hardbreak();
-    }
-
-    #[cfg(not(feature = "verbatim"))]
-    fn foreign_item_verbatim(&mut self, foreign_item: &TokenStream) {
-        if !foreign_item.is_empty() {
-            unimplemented!("ForeignItem::Verbatim `{}`", foreign_item);
-        }
-        self.scan_hardbreak();
-    }
-
     #[cfg(feature = "verbatim")]
     fn foreign_item_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
@@ -941,104 +1233,6 @@ impl Engine {
                 self.flexible_item_type(&foreign_item);
             }
         }
-    }
-
-    fn trait_item(&mut self, trait_item: &TraitItem) {
-        match trait_item {
-            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-            TraitItem::Const(item) => self.trait_item_const(item),
-            TraitItem::Fn(item) => self.trait_item_fn(item),
-            TraitItem::Type(item) => self.trait_item_type(item),
-            TraitItem::Macro(item) => self.trait_item_macro(item),
-            TraitItem::Verbatim(item) => self.trait_item_verbatim(item),
-            _ => unimplemented!("unknown TraitItem"),
-        }
-    }
-
-    fn trait_item_const(&mut self, trait_item: &TraitItemConst) {
-        self.outer_attrs(&trait_item.attrs);
-        self.scan_begin_consistent(0);
-        self.scan_string("const ");
-        self.ident(&trait_item.ident);
-        self.generics(&trait_item.generics);
-        self.scan_string(": ");
-        self.ty(&trait_item.ty);
-        if let Some((_eq_token, default)) = &trait_item.default {
-            self.scan_string(" = ");
-            self.neverbreak();
-            self.expr(default);
-        }
-        self.scan_string(";");
-        self.scan_end();
-        self.scan_trailing_comment(&trait_item.attrs);
-        self.scan_hardbreak();
-    }
-
-    fn trait_item_fn(&mut self, trait_item: &TraitItemFn) {
-        self.outer_attrs(&trait_item.attrs);
-        self.scan_begin_consistent(self.config.indent);
-        self.signature(&trait_item.sig);
-        if let Some(block) = &trait_item.default {
-            self.where_clause_for_body(&trait_item.sig.generics.where_clause);
-            self.scan_string("{");
-            self.scan_trailing_comment(&trait_item.attrs);
-            self.hardbreak_if_nonempty();
-            self.inner_attrs(&trait_item.attrs);
-            for stmt in &block.stmts {
-                self.stmt(stmt);
-            }
-            self.offset(-self.config.indent);
-            self.scan_end();
-            self.scan_string("}");
-        } else {
-            self.where_clause_semi(&trait_item.sig.generics.where_clause);
-            self.scan_end();
-            self.scan_trailing_comment(&trait_item.attrs);
-        }
-        self.scan_hardbreak();
-    }
-
-    fn trait_item_type(&mut self, trait_item: &TraitItemType) {
-        self.outer_attrs(&trait_item.attrs);
-        self.scan_begin_consistent(self.config.indent);
-        self.scan_string("type ");
-        self.ident(&trait_item.ident);
-        self.generics(&trait_item.generics);
-        for bound in trait_item.bounds.iter().delimited() {
-            if bound.is_first {
-                self.scan_string(": ");
-            } else {
-                self.scan_space();
-                self.scan_string("+ ");
-            }
-            self.type_param_bound(&bound);
-        }
-        if let Some((_eq_token, default)) = &trait_item.default {
-            self.scan_string(" = ");
-            self.neverbreak();
-            self.scan_begin_inconsistent(-self.config.indent);
-            self.ty(default);
-            self.scan_end();
-        }
-        self.where_clause_oneline_semi(&trait_item.generics.where_clause);
-        self.scan_end();
-        self.scan_trailing_comment(&trait_item.attrs);
-        self.scan_hardbreak();
-    }
-
-    fn trait_item_macro(&mut self, trait_item: &TraitItemMacro) {
-        self.outer_attrs(&trait_item.attrs);
-        let semicolon = true;
-        self.scan_mac(&trait_item.mac, None, semicolon);
-        self.scan_hardbreak();
-    }
-
-    #[cfg(not(feature = "verbatim"))]
-    fn trait_item_verbatim(&mut self, trait_item: &TokenStream) {
-        if !trait_item.is_empty() {
-            unimplemented!("TraitItem::Verbatim `{}`", trait_item);
-        }
-        self.scan_hardbreak();
     }
 
     #[cfg(feature = "verbatim")]
@@ -1137,97 +1331,6 @@ impl Engine {
         }
     }
 
-    fn impl_item(&mut self, impl_item: &ImplItem) {
-        match impl_item {
-            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-            ImplItem::Const(item) => self.impl_item_const(item),
-            ImplItem::Fn(item) => self.impl_item_fn(item),
-            ImplItem::Type(item) => self.impl_item_type(item),
-            ImplItem::Macro(item) => self.impl_item_macro(item),
-            ImplItem::Verbatim(item) => self.impl_item_verbatim(item),
-            _ => unimplemented!("unknown ImplItem"),
-        }
-    }
-
-    fn impl_item_const(&mut self, impl_item: &ImplItemConst) {
-        self.outer_attrs(&impl_item.attrs);
-        self.scan_begin_consistent(0);
-        self.visibility(&impl_item.vis);
-        if impl_item.defaultness.is_some() {
-            self.scan_string("default ");
-        }
-        self.scan_string("const ");
-        self.ident(&impl_item.ident);
-        self.generics(&impl_item.generics);
-        self.scan_string(": ");
-        self.ty(&impl_item.ty);
-        self.scan_string(" = ");
-        self.neverbreak();
-        self.expr(&impl_item.expr);
-        self.scan_string(";");
-        self.scan_end();
-        self.scan_hardbreak();
-    }
-
-    fn impl_item_fn(&mut self, impl_item: &ImplItemFn) {
-        self.outer_attrs(&impl_item.attrs);
-        self.scan_begin_consistent(self.config.indent);
-        self.visibility(&impl_item.vis);
-        if impl_item.defaultness.is_some() {
-            self.scan_string("default ");
-        }
-        self.signature(&impl_item.sig);
-        self.where_clause_for_body(&impl_item.sig.generics.where_clause);
-
-        // Want this on the next line if the prior line was a smart wrap
-        self.scan_string("{");
-
-        self.hardbreak_if_nonempty();
-        self.inner_attrs(&impl_item.attrs);
-        for stmt in &impl_item.block.stmts {
-            self.stmt(stmt);
-        }
-        self.offset(-self.config.indent);
-        self.scan_end();
-        self.scan_string("}");
-        self.scan_hardbreak();
-    }
-
-    fn impl_item_type(&mut self, impl_item: &ImplItemType) {
-        self.outer_attrs(&impl_item.attrs);
-        self.scan_begin_consistent(self.config.indent);
-        self.visibility(&impl_item.vis);
-        if impl_item.defaultness.is_some() {
-            self.scan_string("default ");
-        }
-        self.scan_string("type ");
-        self.ident(&impl_item.ident);
-        self.generics(&impl_item.generics);
-        self.scan_string(" = ");
-        self.neverbreak();
-        self.scan_begin_inconsistent(-self.config.indent);
-        self.ty(&impl_item.ty);
-        self.scan_end();
-        self.where_clause_oneline_semi(&impl_item.generics.where_clause);
-        self.scan_end();
-        self.scan_hardbreak();
-    }
-
-    fn impl_item_macro(&mut self, impl_item: &ImplItemMacro) {
-        self.outer_attrs(&impl_item.attrs);
-        let semicolon = true;
-        self.scan_mac(&impl_item.mac, None, semicolon);
-        self.scan_hardbreak();
-    }
-
-    #[cfg(not(feature = "verbatim"))]
-    fn impl_item_verbatim(&mut self, impl_item: &TokenStream) {
-        if !impl_item.is_empty() {
-            unimplemented!("ImplItem::Verbatim `{}`", impl_item);
-        }
-        self.scan_hardbreak();
-    }
-
     #[cfg(feature = "verbatim")]
     fn impl_item_verbatim(&mut self, tokens: &TokenStream) {
         use syn::parse::{Parse, ParseStream, Result};
@@ -1304,110 +1407,6 @@ impl Engine {
             ImplItemVerbatim::TypeFlexible(impl_item) => {
                 self.flexible_item_type(&impl_item);
             }
-        }
-    }
-
-    fn signature(&mut self, signature: &Signature) {
-        if signature.constness.is_some() {
-            self.scan_string("const ");
-        }
-        if signature.asyncness.is_some() {
-            self.scan_string("async ");
-        }
-        if signature.unsafety.is_some() {
-            self.scan_string("unsafe ");
-        }
-        if let Some(abi) = &signature.abi {
-            self.abi(abi);
-        }
-        self.scan_string("fn ");
-        self.ident(&signature.ident);
-        self.generics(&signature.generics);
-        self.scan_string("(");
-
-        // Signature params
-        self.neverbreak();
-        self.scan_begin_inconsistent(0);
-        // self.smart_wrap_body_begin();
-        //self.smart_wrap_zerobreak();
-        self.zerobreak();
-        for input in signature.inputs.iter().delimited() {
-            self.fn_arg(&input);
-            let is_last = input.is_last && signature.variadic.is_none();
-            self.trailing_comma(is_last);
-        }
-        if let Some(variadic) = &signature.variadic {
-            self.variadic(variadic);
-            //self.smart_wrap_zerobreak();
-            self.zerobreak();
-        }
-        self.offset(-self.config.indent);
-        //self.smart_wrap_body_end();
-        self.scan_end();
-
-        self.scan_string(")");
-        self.scan_begin_consistent(-self.config.indent);
-        self.return_type(&signature.output);
-        self.scan_end();
-    }
-
-    fn fn_arg(&mut self, fn_arg: &FnArg) {
-        match fn_arg {
-            FnArg::Receiver(receiver) => self.receiver(receiver),
-            FnArg::Typed(pat_type) => self.pat_type(pat_type),
-        }
-    }
-
-    fn receiver(&mut self, receiver: &Receiver) {
-        self.outer_attrs(&receiver.attrs);
-        if let Some((_ampersand, lifetime)) = &receiver.reference {
-            self.scan_string("&");
-            if let Some(lifetime) = lifetime {
-                self.lifetime(lifetime);
-                self.nbsp();
-            }
-        }
-        if receiver.mutability.is_some() {
-            self.scan_string("mut ");
-        }
-        self.scan_string("self");
-        if receiver.colon_token.is_some() {
-            self.scan_string(": ");
-            self.ty(&receiver.ty);
-        } else {
-            let consistent = match (&receiver.reference, &receiver.mutability, &*receiver.ty) {
-                (Some(_), mutability, Type::Reference(ty)) => {
-                    mutability.is_some() == ty.mutability.is_some()
-                        && match &*ty.elem {
-                            Type::Path(ty) => ty.qself.is_none() && ty.path.is_ident("Self"),
-                            _ => false,
-                        }
-                }
-                (None, _, Type::Path(ty)) => ty.qself.is_none() && ty.path.is_ident("Self"),
-                _ => false,
-            };
-            if !consistent {
-                self.scan_string(": ");
-                self.ty(&receiver.ty);
-            }
-        }
-    }
-
-    fn variadic(&mut self, variadic: &Variadic) {
-        self.outer_attrs(&variadic.attrs);
-        if let Some((pat, _colon)) = &variadic.pat {
-            self.pat(pat);
-            self.scan_string(": ");
-        }
-        self.scan_string("...");
-    }
-
-    fn static_mutability(&mut self, mutability: &StaticMutability) {
-        match mutability {
-            #![cfg_attr(all(test, exhaustive), deny(non_exhaustive_omitted_patterns))]
-            StaticMutability::Mut(_) => self.scan_string("mut "),
-            StaticMutability::None => {}
-            _ => unimplemented!("unknown StaticMutability"),
         }
     }
 }
