@@ -272,7 +272,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to append
     /// * ***inner***: Append the given comments as inner comments
     fn append_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if self.config.no_comments() {
+        if !self.config.comments() {
             return;
         }
         for comment in comments {
@@ -287,7 +287,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to append
     /// * ***inner***: Append the given comments as inner comments
     fn append_next_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if self.config.no_comments() {
+        if !self.config.comments() {
             return;
         }
         for comment in comments {
@@ -302,7 +302,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to prepend
     /// * ***inner***: Prepend the given comments as inner comments
     fn prepend_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if self.config.no_comments() {
+        if !self.config.comments() {
             return;
         }
         for comment in comments {

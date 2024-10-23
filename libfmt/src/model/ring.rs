@@ -52,6 +52,11 @@ impl<T> RingBuffer<T> {
         &self.data[0]
     }
 
+    /// Get a reference to an arbitrary item from the ring buffer.
+    pub fn get(&self, i: usize) -> Option<&T> {
+        self.data.get(i)
+    }
+
     pub fn first_mut(&mut self) -> &mut T {
         &mut self.data[0]
     }

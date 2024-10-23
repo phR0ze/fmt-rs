@@ -1,5 +1,8 @@
 # libfmt
 
+## Current
+* [ ] C0002: Smart wrapping
+
 ## Backlog
 * [ ] Format comments to max line length
 * [ ] Order create use statements after upstream use statements
@@ -11,4 +14,7 @@
       ```
 
 ## Completed
-* [x] Initial support for comments
+Each completed task has an associated issue number used for tracking changes to the code in comments.
+
+* [x] C0001: Initial support for comments
+* [x] C0000: Skip parameter trailing comma

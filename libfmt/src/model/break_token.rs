@@ -25,7 +25,7 @@
 /// cram stuff onto a line. But in all cases if it can make a block a one-liner, it’ll do so.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) enum Break {
-    /// Align any following lines vertically after the break
+    /// Interprets all breaks as having a consistent vertical alignment
     ///
     /// #### Example:
     /// ```ignore
@@ -49,13 +49,36 @@ pub(crate) enum Break {
 /// Contains information about how to break
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct BreakToken {
+    /// ?
     pub offset: isize,
+
+    /// ?
     pub blank_space: usize,
+
+    /// ?
     pub pre_break: Option<char>,
+
+    /// ?
     pub post_break: Option<char>,
+
+    /// ?
     pub no_break: Option<char>,
+
+    /// ?
     pub if_nonempty: bool,
+
+    /// ?
     pub never_break: bool,
+}
+
+impl BreakToken {
+    /// Create a new neverbreak BreakToken
+    pub fn neverbreak() -> Self {
+        Self {
+            never_break: true,
+            ..BreakToken::default()
+        }
+    }
 }
 
 #[cfg(test)]

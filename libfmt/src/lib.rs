@@ -70,115 +70,104 @@ mod tests {
     use indoc::indoc;
     use tracing_test::traced_test;
 
+    // Feature C0002: Smart Wrapping
+    // * rustfmt: aligns vertically regardless of readability
+    // * libfmt: smart wraps at line limits improving readability
     #[test]
-    fn test_smart_wrapping_for_params() {
+    fn test_smart_wrapping_for_macro_params() {
+        // rustfmt formatting
         let source = indoc! {r#"
-            println!("1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}", "1", "2", "3", "4", "5", "6", "7", "8", "9");
+            println!(
+                "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+                "1",
+                "2",
+                "3",
+                "4",
+                "5",
+                "6",
+                "7",
+                "8",
+                "9",
+                "10",
+                "11",
+                "12",
+                "13",
+                "14",
+                "15",
+                "16",
+                "17",
+                "18",
+            );
+        "#};
+
+        // libfmt formatting
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                println!("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2", "3", "4",
+                    "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18");
+            "#},
+        );
+
+        let source = indoc! {r#"
+            impl fmt::Display for Example {
+                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                    write!(
+                        f,
+                        "{} {} {} {} {} {} {} {}",
+                        "1", "2", "3", "4", "5", "6", "7", "8",
+                    )?;
+                }
+            }
         "#};
         assert_eq!(
             format_str(None, source).unwrap(),
-            //format_str(Some(Config::new().with_no_smart_wrapping()), source).unwrap(),
-            // indoc! {r#"
-            //     println!(
-            //         "1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}", "1", "2", "3", "4",
-            //         "5", "6", "7", "8", "9"
-            //     );
-            // "#},
-            // indoc! {r#"
-            //     println!("1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}",
-            //         "1", "2", "3", "4", "5", "6", "7", "8", "9");
-            // "#},
             indoc! {r#"
-                println!(
-                "1: {}, 2: {}, 3: {}, 4: {}, 5: {}, 6: {}, 7: {}, 8: {}, 9: {}", "1", "2", "3", "4", "5",
-                    "6", "7", "8", "9");
+                impl fmt::Display for Example {
+                    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+                        write!(f, "{} {} {} {} {} {} {} {}", "1", "2", "3", "4", "5", "6", "7", "8")?;
+                    }
+                }
+            "#},
+        );
+
+        // Original macro formatting to ensure I don't break compatibility
+        let source = indoc! {r#"
+            macro_rules! add{
+                ($a:expr)=>{
+                    $a
+                };
+                ($a:expr,$b:expr)=>{
+                    {
+                        $a+$b
+                    }
+                };
+                ($a:expr,$($b:tt)*)=>{
+                    {
+                        $a+add!($($b)*)
+                    }
+                }
+            }
+        "#};
+        assert_eq!(
+            format_str(None, source).unwrap(),
+            indoc! {r#"
+                macro_rules! add {
+                    ($a:expr) => {
+                        $a
+                    };
+                    ($a:expr,$b:expr) => {
+                        { $a +$b }
+                    };
+                    ($a:expr,$($b:tt)*) => {
+                        { $a + add!($($b)*) }
+                    };
+                }
             "#},
         );
     }
 
-    // // // Rustfmt will align the parameters vertically
-    // // // libfmt will align the parameters horizontally and wrap intelligently
-    // // #[test]
-    // // fn test_params_align_horizontally() {
-    // //     // rustfmt: aligns vertically regardless of readability
-    // //     let out = fmt(quote! {
-    // //         impl fmt::Display for Example {
-    // //             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    // //                 write!(
-    // //                     f,
-    // //                     "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}",
-    // //                     "1",
-    // //                     "2",
-    // //                     "3",
-    // //                     "4",
-    // //                     "5",
-    // //                     "6",
-    // //                     "7",
-    // //                     "8",
-    // //                     "9",
-    // //                     "10",
-    // //                     "11",
-    // //                     "12",
-    // //                     "13",
-    // //                     "14",
-    // //                     "15",
-    // //                     "16",
-    // //                     "17"
-    // //                 )?;
-    // //             }
-    // //         }
-    // //     });
-    // //     println!("{}", out);
-    // //     assert_eq!(
-    // //         out,
-    // //         // libfmt: breaks at limt and wraps intelligently
-    // //         indoc! {r#"
-    // //             impl fmt::Display for Example {
-    // //                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    // //                     write!(f, "{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2",
-    // //                         "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15",
-    // //                         "16", "17"
-    // //                     )
-    // //                 }
-    // //             }
-    // //         "#},
-    // //     );
-    // // }
-
-    // // Rustfmt will align macro parameters vertically
-    // // libfmt will align macro parameters horizontally and wrap intelligently
-    // // Issues:
-    // // - not wrapping intelligently
-    // #[test]
-    // fn test_macro_horizontal_aligment() {
-    //     // rustfmt: aligns vertically regardless of readability
-    //     let source = indoc! {r#"
-    //         impl fmt::Display for Example {
-    //             fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //                 write!(
-    //                     f,
-    //                     "{} {} {} {} {} {} {} {}",
-    //                     "1", "2", "3", "4", "5", "6", "7", "8",
-    //                 )?;
-    //             }
-    //         }
-    //     "#};
-    //     assert_eq!(
-    //         source,
-    //         indoc! {r#"
-    //             impl fmt::Display for Example {
-    //                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-    //                     write!(
-    //                         f,
-    //                         "{} {} {} {} {} {} {} {}",
-    //                         "1", "2", "3", "4", "5", "6", "7", "8",
-    //                     )?;
-    //                 }
-    //             }
-    //         "#},
-    //     );
-    // }
-
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_macro() {
         let source = indoc! {r#"
@@ -192,6 +181,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_trait() {
         let source = indoc! {r#"
@@ -221,6 +211,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_struct() {
         let source = indoc! {r#"
@@ -242,6 +233,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_static() {
         let source = indoc! {r#"
@@ -255,6 +247,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_mod() {
         let source = indoc! {r#"
@@ -278,6 +271,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_impl() {
         let source = indoc! {r#"
@@ -303,6 +297,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_func() {
         let source = indoc! {r#"
@@ -320,6 +315,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_item_enum() {
         let source = indoc! {r#"
@@ -339,6 +335,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_trailing_const() {
         let source = indoc! {r#"
@@ -352,6 +349,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_comment_only_comments() {
         let source = indoc! {r#"
@@ -365,6 +363,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_multi_comment_types() {
         let source = indoc! {r#"
@@ -404,6 +403,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_block_comment() {
         let source = indoc! {r#"
@@ -427,6 +427,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"
@@ -458,6 +459,7 @@ mod tests {
         );
     }
 
+    // Feature C0001: Comments
     #[test]
     fn test_only_allow_one_empty_line() {
         let source = indoc! {r#"
@@ -475,6 +477,7 @@ mod tests {
         );
     }
 
+    // Feature C0000: Skip trailing comma
     #[test]
     fn test_skip_trailing_comma() {
         let source = indoc! {r#"

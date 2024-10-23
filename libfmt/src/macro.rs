@@ -42,18 +42,26 @@ impl Engine {
 
         // Scan the macro body tokens
         if !mac.tokens.is_empty() {
-            self.scan_begin_consistent(self.config.indent);
+            // C0002: Smart wrapping
+            if !self.config.smart_wrapping() {
+                self.scan_begin_consistent(self.config.indent);
+            } else {
+                self.scan_begin_inconsistent(self.config.indent);
+            }
             delimiter_break(self);
 
+            // C0002: Smart wrapping
+            if !self.config.smart_wrapping() {
+                self.scan_begin_inconsistent(0);
+            }
             // Scan the macro body
-            self.scan_begin_inconsistent(0);
             self.macro_rules_tokens(mac.tokens.clone(), false);
-            self.scan_end();
+            // C0002: Smart wrapping
+            if !self.config.smart_wrapping() {
+                self.scan_end();
+            }
 
-            // libfmt: control brace_style for macro
-            // if !INVOKATION_BRACE_STYLE_SAME_LINE {
             delimiter_break(self);
-            // }
 
             // Reset offset back to macro root level
             self.offset(-self.config.indent);

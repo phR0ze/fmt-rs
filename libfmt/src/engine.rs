@@ -61,13 +61,13 @@ pub struct Engine {
     /// Ring buffer of tokens and calculated size of strings i.e. number of characters
     pub(crate) scan_buf: RingBuffer<BufEntry>,
 
-    /// Tracks the total size (i.e. number of characters) of tokens that have been printed from the
-    /// ring buffer.
+    /// Tracks the total size (i.e. number of characters) of tokens that have been popped, i.e.
+    /// printed, from the ring buffer.
     /// Always starts at 1
     pub(crate) left_total: isize,
 
-    /// Tracks the total size (i.e. number of characters) of tokens that have been enqueued in the
-    /// ring buffer.
+    /// Tracks the total size (i.e. number of characters) of tokens that have been enqueued, i.e.
+    /// scanned, into the ring buffer.
     /// Always starts at 1
     pub(crate) right_total: isize,
 
@@ -175,8 +175,8 @@ impl Engine {
         trace!("{}", self);
     }
 
-    /// Marks a break in the code by pushing a BreakToken onto the scan buffer and tracks it's index
-    /// on the scan stack.
+    /// Marks a potential break in the code by pushing a BreakToken onto the scan buffer and tracks
+    /// it's index on the scan stack.
     /// * Used for: Comma, Semicolon, etc...
     pub fn scan_break(&mut self, token: BreakToken) {
         trace!("Scan break: {:?}", token);
@@ -341,6 +341,7 @@ impl Engine {
 
             match left.token {
                 Scan::String(string) => {
+                    // Feature: C0000
                     if self.skip_trailing_comma(&string) {
                         continue;
                     }
@@ -365,15 +366,33 @@ impl Engine {
 
     /// If the given value is a comma and the scan buffer still has more tokens and the next token
     /// is an End token, then skip the trailing comma.
+    /// * Feature: C0000
     fn skip_trailing_comma(&self, value: &str) -> bool {
+        if !self.config.skip_trailing_comma() {
+            return false;
+        }
+
         if value == "," && !self.scan_buf.is_empty() {
-            if let Scan::End = &self.scan_buf.first().token {
-                return true;
+            if !self.config.smart_wrapping() {
+                if let Some(Scan::End) = self.scan_buf.get(0).map(|x| &x.token) {
+                    if let Some(Scan::Break(_)) = self.scan_buf.get(0).map(|x| &x.token) {
+                        if let Some(Scan::End) = self.scan_buf.get(1).map(|x| &x.token) {
+                            return true;
+                        }
+                    }
+                }
+            } else {
+                if let Some(Scan::Break(_)) = self.scan_buf.get(0).map(|x| &x.token) {
+                    if let Some(Scan::End) = self.scan_buf.get(1).map(|x| &x.token) {
+                        return true;
+                    }
+                }
             }
         }
         return false;
     }
 
+    /// Grab a copy of the top of the print stack or the default outer frame if the stack is empty.
     fn get_top(&self) -> PrintFrame {
         const OUTER: PrintFrame = PrintFrame::Broken(0, Break::Inconsistent);
         self.print_stack.last().map_or(OUTER, PrintFrame::clone)
@@ -382,21 +401,6 @@ impl Engine {
     fn print_begin(&mut self, token: BeginToken, size: isize) {
         trace!("Print begin");
 
-        if cfg!(prettyplease_debug) {
-            self.out.push(match token.breaks {
-                Break::Consistent => '«',
-                Break::Inconsistent => '‹',
-            });
-            if cfg!(prettyplease_debug_indent) {
-                self.out
-                    .extend(token.offset.to_string().chars().map(|ch| match ch {
-                        '0'..='9' => ['₀', '₁', '₂', '₃', '₄', '₅', '₆', '₇', '₈', '₉']
-                            [(ch as u8 - b'0') as usize],
-                        '-' => '₋',
-                        _ => unreachable!(),
-                    }));
-            }
-        }
         if size > self.space {
             self.print_stack
                 .push(PrintFrame::Broken(self.indent, token.breaks));
@@ -416,16 +420,12 @@ impl Engine {
             }
             PrintFrame::Fits(breaks) => breaks,
         };
-        if cfg!(prettyplease_debug) {
-            self.out.push(match breaks {
-                Break::Consistent => '»',
-                Break::Inconsistent => '›',
-            });
-        }
 
         trace!("Print end (out): {}", self.out);
     }
 
+    /// Evalate the given break token to determine what kind of break is needed in the final printed
+    /// output.
     fn print_break(&mut self, token: BreakToken, size: isize) {
         trace!("Print break: {:?}", token);
 
@@ -442,21 +442,19 @@ impl Engine {
                 self.out.push(no_break);
                 self.space -= no_break.len_utf8() as isize;
             }
-            if cfg!(prettyplease_debug) {
-                self.out.push('·');
-            }
+
+        // A hard break is required
         } else {
             if let Some(pre_break) = token.pre_break {
                 self.print_indent();
                 self.out.push(pre_break);
             }
-            if cfg!(prettyplease_debug) {
-                self.out.push('·');
-            }
+
             self.out.push('\n');
             let indent = self.indent as isize + token.offset;
             self.pending_indentation = usize::try_from(indent).unwrap();
             self.space = cmp::max(self.config.margin - indent, self.config.min_space);
+
             if let Some(post_break) = token.post_break {
                 self.print_indent();
                 self.out.push(post_break);
@@ -467,12 +465,11 @@ impl Engine {
         trace!("Print break (out): {}", self.out);
     }
 
-    /// Print the given value including any indent to the output String
+    /// Print the given value including any indent to the output
     fn print_string(&mut self, value: Cow<'static, str>) {
         trace!("Print string: {}", value);
 
         self.print_indent();
-
         self.out.push_str(&value);
         self.space -= value.len() as isize;
 
@@ -482,7 +479,7 @@ impl Engine {
         }
     }
 
-    /// Print indentation spaces to the output String
+    /// Print pending indentation spaces to the output
     fn print_indent(&mut self) {
         trace!("Print indent");
 

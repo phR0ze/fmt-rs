@@ -2,7 +2,7 @@ use crate::engine::{Engine, SIZE_INFINITY};
 use crate::model::{BeginToken, Break, BreakToken};
 
 impl Engine {
-    /// Scan start with inconsistent breaks and the given indent for subsequent lines
+    /// Begin tracking block, automatically break with the given indent in a inconsistent mmaner
     pub fn scan_begin_inconsistent(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
@@ -10,7 +10,7 @@ impl Engine {
         });
     }
 
-    /// Scan start with consistent breaks and the given indent for subsequent lines
+    /// Begin tracking block, automatically break with the given indent in a consistent mmaner
     pub fn scan_begin_consistent(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
@@ -84,10 +84,8 @@ impl Engine {
         }
     }
 
+    /// Create a neverbreak break token
     pub fn neverbreak(&mut self) {
-        self.scan_break(BreakToken {
-            never_break: true,
-            ..BreakToken::default()
-        });
+        self.scan_break(BreakToken::neverbreak());
     }
 }
