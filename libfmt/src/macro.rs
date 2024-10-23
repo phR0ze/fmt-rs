@@ -42,25 +42,14 @@ impl Engine {
 
         // Scan the macro body tokens
         if !mac.tokens.is_empty() {
-            // C0002: Smart wrapping
-            if !self.config.smart_wrapping() {
-                self.scan_begin_consistent(self.config.indent);
-            } else {
-                self.scan_begin_inconsistent(self.config.indent);
-            }
+            self.smart_wrap_begin();
             delimiter_break(self);
+            self.smart_wrap_body_begin();
 
-            // C0002: Smart wrapping
-            if !self.config.smart_wrapping() {
-                self.scan_begin_inconsistent(0);
-            }
             // Scan the macro body
             self.macro_rules_tokens(mac.tokens.clone(), false);
-            // C0002: Smart wrapping
-            if !self.config.smart_wrapping() {
-                self.scan_end();
-            }
 
+            self.smart_wrap_body_end();
             delimiter_break(self);
 
             // Reset offset back to macro root level

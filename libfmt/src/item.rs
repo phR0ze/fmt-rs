@@ -91,7 +91,13 @@ impl Engine {
 
     fn item_fn(&mut self, item: &ItemFn) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_consistent(self.config.indent);
+
+        // C0002: Smart wrapping
+        if !self.config.smart_wrapping() {
+            self.scan_begin_consistent(self.config.indent);
+        } else {
+            self.scan_begin_inconsistent(self.config.indent);
+        }
         self.visibility(&item.vis);
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
@@ -1172,7 +1178,10 @@ impl Engine {
         }
         self.signature(&impl_item.sig);
         self.where_clause_for_body(&impl_item.sig.generics.where_clause);
+
+        // Want this on the next line if the prior line was a smart wrap
         self.scan_string("{");
+
         self.hardbreak_if_nonempty();
         self.inner_attrs(&impl_item.attrs);
         for stmt in &impl_item.block.stmts {
@@ -1315,8 +1324,12 @@ impl Engine {
         self.ident(&signature.ident);
         self.generics(&signature.generics);
         self.scan_string("(");
+
+        // Signature params
         self.neverbreak();
-        self.scan_begin_consistent(0);
+        self.scan_begin_inconsistent(0);
+        // self.smart_wrap_body_begin();
+        //self.smart_wrap_zerobreak();
         self.zerobreak();
         for input in signature.inputs.iter().delimited() {
             self.fn_arg(&input);
@@ -1325,10 +1338,13 @@ impl Engine {
         }
         if let Some(variadic) = &signature.variadic {
             self.variadic(variadic);
+            //self.smart_wrap_zerobreak();
             self.zerobreak();
         }
         self.offset(-self.config.indent);
+        //self.smart_wrap_body_end();
         self.scan_end();
+
         self.scan_string(")");
         self.scan_begin_consistent(-self.config.indent);
         self.return_type(&signature.output);
