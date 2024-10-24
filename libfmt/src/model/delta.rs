@@ -3,11 +3,33 @@ use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Eq)]
 pub struct Delta {
     // Track the delta
-    pub(crate) track: bool,
-    pub(crate) accum: isize,
+    track: bool,
+    accum: isize,
 
     // Internal value we are working with
-    pub(crate) value: isize,
+    value: isize,
+}
+
+impl Delta {
+    pub fn set(&mut self, value: isize) {
+        self.value = value;
+    }
+
+    pub fn start_tracking(&mut self) {
+        self.track = true;
+    }
+
+    pub fn stop_tracking(&mut self) {
+        self.track = false;
+    }
+
+    pub fn value(&self) -> isize {
+        self.value
+    }
+
+    pub fn accum(&self) -> isize {
+        self.accum
+    }
 }
 
 impl Default for Delta {
