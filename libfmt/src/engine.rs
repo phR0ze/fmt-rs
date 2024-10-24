@@ -69,7 +69,7 @@ pub struct Engine {
     /// Tracks the total size (i.e. number of characters) of tokens that have been enqueued, i.e.
     /// scanned, into the ring buffer.
     /// Always starts at 1
-    pub(crate) right_total: isize,
+    pub(crate) right_total: Delta,
 
     /// Tracks the current block being scanned. Holds ring-buffer index values of the ***Begin***
     /// that started the current block, possibly with the most recent Break after that Begin (if
@@ -98,7 +98,7 @@ impl Engine {
             space: margin,
             scan_buf: RingBuffer::new(),
             left_total: 0,
-            right_total: 0,
+            right_total: Delta::default(),
             scan_blocks: VecDeque::new(),
             print_stack: Vec::new(),
             indent: 0,
@@ -125,7 +125,7 @@ impl Engine {
 
         if self.scan_blocks.is_empty() {
             self.left_total = 1;
-            self.right_total = 1;
+            self.right_total.set(1);
             self.scan_buf.clear();
         }
         let right = self.scan_buf.push(BufEntry {
@@ -154,14 +154,14 @@ impl Engine {
                             self.scan_buf.pop_last();
                             self.scan_blocks.pop_back();
                             self.scan_blocks.pop_back();
-                            self.right_total -= break_token.blank_space as isize;
+                            self.right_total -= (break_token.blank_space as isize).into();
                             return;
                         }
                     }
                     if break_token.if_nonempty {
                         self.scan_buf.pop_last();
                         self.scan_blocks.pop_back();
-                        self.right_total -= break_token.blank_space as isize;
+                        self.right_total -= (break_token.blank_space as isize).into();
                     }
                 }
             }
@@ -183,7 +183,7 @@ impl Engine {
 
         if self.scan_blocks.is_empty() {
             self.left_total = 1;
-            self.right_total = 1;
+            self.right_total.set(1);
             self.scan_buf.clear();
         } else {
             self.update_scan_block_depth_and_size(0);
@@ -193,7 +193,7 @@ impl Engine {
             size: -self.right_total,
         });
         self.scan_blocks.push_back(right);
-        self.right_total += token.blank_space as isize;
+        self.right_total += (token.blank_space as isize).into();
 
         trace!("{}", self);
     }
@@ -214,7 +214,7 @@ impl Engine {
             });
 
             // Update the total string length to include the new string
-            self.right_total += len;
+            self.right_total += len.into();
 
             self.print_if_past_max_line_width();
         }
@@ -253,13 +253,13 @@ impl Engine {
                     depth -= 1;
                     if depth == 0 {
                         if entry.size < 0 {
-                            let actual_width = entry.size + self.right_total;
+                            let actual_width = entry.size + self.right_total.isize();
                             if actual_width > max {
                                 self.scan_buf.push(BufEntry {
                                     token: Scan::String(Cow::Borrowed("")),
                                     size: SIZE_INFINITY,
                                 });
-                                self.right_total += SIZE_INFINITY;
+                                self.right_total += SIZE_INFINITY.into();
                             }
                         }
                         break;
@@ -279,7 +279,7 @@ impl Engine {
         trace!("Print if past max line width");
 
         // While the current stream is longer than the allowed max width
-        while self.right_total - self.left_total > self.space {
+        while self.right_total - self.left_total.into() > self.space.into() {
             // Pop the first element from the scan stack if it is also the first
             // element in the scan buffer, then update the scan buffer element's size to infinity.
             if *self.scan_blocks.front().unwrap() == self.scan_buf.index_of_first() {
@@ -311,7 +311,7 @@ impl Engine {
                     self.scan_blocks.pop_back().unwrap();
 
                     // Begin size gets updated with buffer enqueued character size
-                    entry.size += self.right_total;
+                    entry.size += self.right_total.isize();
 
                     // Depth gets decremented as this block is processed
                     depth -= 1;
@@ -323,7 +323,7 @@ impl Engine {
                 }
                 Scan::Break(_) => {
                     self.scan_blocks.pop_back().unwrap();
-                    entry.size += self.right_total;
+                    entry.size += self.right_total.isize();
                     if depth == 0 {
                         break;
                     }
@@ -487,7 +487,7 @@ impl fmt::Display for Engine {
         )?;
 
         writeln!(f, "  left_total: {}", self.left_total)?;
-        writeln!(f, "  right_total: {}", self.right_total)?;
+        writeln!(f, "  right_total: {}", self.right_total.isize())?;
         writeln!(f, "  scan_stack: {:?}", self.scan_blocks)?;
         writeln!(f, "  print_stack: {:?}", self.print_stack)?;
         writeln!(f, "  indent: {}", self.indent)?;
