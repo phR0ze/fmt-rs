@@ -29,7 +29,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_buf_entry_debug() {
+    fn buf_entry_debug() {
         let entry = BufEntry {
             token: Scan::String(Cow::Borrowed("hello")),
             size: 5,
@@ -41,7 +41,7 @@ mod tests {
     }
 
     #[test]
-    fn test_token_debug() {
+    fn token_debug() {
         let token = Scan::String(Cow::Borrowed("hello"));
         assert_eq!(format!("{:?}", token), "String(\"hello\")",);
     }

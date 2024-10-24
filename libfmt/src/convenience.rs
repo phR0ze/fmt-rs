@@ -3,6 +3,8 @@ use crate::model::{BeginToken, BreakToken, Flow};
 
 impl Engine {
     /// Begin tracking block using a horizontal flow for any breaks
+    ///
+    /// * ***indent***: The number of spaces to indent the block beyond the typical 4 space indent
     pub fn scan_begin_horizontal(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
@@ -11,6 +13,8 @@ impl Engine {
     }
 
     /// Begin tracking block using a vertical flow for any breaks
+    ///
+    /// * ***indent***: The number of spaces to indent the block beyond the typical 4 space indent
     pub fn scan_begin_vertical(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
@@ -41,13 +45,12 @@ impl Engine {
         self.scan_break(BreakToken::space(n));
     }
 
-    /// Add a BreakToken with the neverbreak flag set
+    /// Add a BreakToken with the never_break flag set
     pub fn scan_break_never(&mut self) {
         self.scan_break(BreakToken::never());
     }
 
-    /// Add a break to the buffer that will use a newline if the break is used during the final
-    /// printing of the code
+    /// Add a break to the buffer that will use a newline in the final printing of the code
     pub fn scan_break_newline(&mut self) {
         self.scan_break_spaces(SIZE_INFINITY as usize);
     }
@@ -62,8 +65,7 @@ impl Engine {
         });
     }
 
-    /// Add a break to the buffer that will use a newline if the buffer is not empty and if the
-    /// break is used during the final printing of the code
+    /// Add a break to the buffer that will use a newline if the buffer is not empty
     pub fn scan_break_newline_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: SIZE_INFINITY as usize,

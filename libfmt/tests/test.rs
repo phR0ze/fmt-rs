@@ -9,7 +9,7 @@
 // }
 
 // #[test]
-// fn test_parenthesize_cond() {
+// fn parenthesize_cond() {
 //     let s = Group::new(Delimiter::None, quote!(Struct {}));
 //     test(
 //         quote! {
@@ -26,7 +26,7 @@
 // // }
 
 // #[test]
-// fn test_parenthesize_match_guard() {
+// fn parenthesize_match_guard() {
 //     let expr_struct = Group::new(Delimiter::None, quote!(Struct {}));
 //     let expr_binary = Group::new(Delimiter::None, quote!(true && false));
 //     test(

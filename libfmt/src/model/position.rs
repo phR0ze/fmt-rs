@@ -87,14 +87,14 @@ mod tests {
     }
 
     #[test]
-    fn test_subtract_usize() {
+    fn subtract_usize() {
         assert_eq!(pos(0, 0) - 1, pos(0, 0));
         assert_eq!(pos(0, 1) - 1, pos(0, 0));
         assert_eq!(pos(0, 2) - 1, pos(0, 1));
     }
 
     #[test]
-    fn test_order() {
+    fn order() {
         // Greater than
         assert!(pos(0, 1) > pos(0, 0));
         assert!(pos(1, 0) > pos(0, 5));
@@ -109,12 +109,12 @@ mod tests {
     }
 
     #[test]
-    fn test_to_string() {
+    fn to_string() {
         assert_eq!(pos(1, 1).to_string(), "1:1".to_string());
     }
 
     #[test]
-    fn test_from_linecolumn() {
+    fn from_linecolumn() {
         // LineColumn is 1-indexed so we need to subtract 1 to convert it to Position
         let pos1: Position = LineColumn { line: 1, column: 0 }.into();
         assert_eq!(pos1, pos(0, 0));

@@ -91,17 +91,12 @@ impl Engine {
 
     fn item_fn(&mut self, item: &ItemFn) {
         self.outer_attrs(&item.attrs);
-
-        // C0002: Smart wrapping
-        if !self.config.smart_wrapping() {
-            self.scan_begin_vertical(self.config.indent);
-        } else {
-            self.scan_begin_horizontal(self.config.indent);
-        }
+        self.smart_wrap_begin_default();
         self.visibility(&item.vis);
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
         self.scan_string("{");
+
         self.scan_trailing_comment(&item.attrs);
         self.scan_break_newline_if_nonempty();
         self.inner_attrs(&item.attrs);
@@ -210,7 +205,7 @@ impl Engine {
 
     fn item_static(&mut self, item: &ItemStatic) {
         self.outer_attrs(&item.attrs);
-        self.scan_begin_vertical(0);
+        self.smart_wrap_begin_zero();
         self.visibility(&item.vis);
         self.scan_string("static ");
         self.static_mutability(&item.mutability);
@@ -218,15 +213,7 @@ impl Engine {
         self.scan_string(": ");
         self.ty(&item.ty);
         self.scan_string(" = ");
-
-        // What is a break?
-        // self.scan_break(BreakToken {
-        //     blank_space: 1,
-        //     ..BreakToken::default()
-        // });
         self.scan_break_never();
-        //self.zerobreak();
-
         self.expr(&item.expr);
         self.scan_string(";");
         self.scan_end();
@@ -729,12 +716,10 @@ impl Engine {
         self.ident(&signature.ident);
         self.generics(&signature.generics);
         self.scan_string("(");
+        self.scan_break_never();
 
         // Signature params
-        self.scan_break_never();
-        self.scan_begin_horizontal(0);
-        // self.smart_wrap_body_begin();
-        //self.smart_wrap_zerobreak();
+        self.smart_wrap_begin_zero();
         self.scan_break_zero();
         for input in signature.inputs.iter().delimited() {
             self.fn_arg(&input);
@@ -743,11 +728,9 @@ impl Engine {
         }
         if let Some(variadic) = &signature.variadic {
             self.variadic(variadic);
-            //self.smart_wrap_zerobreak();
             self.scan_break_zero();
         }
         self.offset(-self.config.indent);
-        //self.smart_wrap_body_end();
         self.scan_end();
 
         self.scan_string(")");

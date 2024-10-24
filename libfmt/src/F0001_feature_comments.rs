@@ -3,10 +3,10 @@ mod tests {
     use indoc::indoc;
     use tracing_test::traced_test;
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     // ---------------------------------------------------------------------------------------------
     #[test]
-    fn test_comment_trailing_item_macro() {
+    fn comment_trailing_item_macro() {
         let source = indoc! {r#"
             println!("Hello"); // Hello
         "#};
@@ -18,9 +18,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_trait() {
+    fn comment_trailing_item_trait() {
         let source = indoc! {r#"
             trait Foo { // Foo
                 type Item; // Bar
@@ -48,9 +48,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_struct() {
+    fn comment_trailing_item_struct() {
         let source = indoc! {r#"
             struct Foo1; // Foo1 struct
             struct Foo2 { // Foo2 struct
@@ -70,9 +70,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_static() {
+    fn comment_trailing_item_static() {
         let source = indoc! {r#"
             static FOO: i32 = 42; // Foo
         "#};
@@ -84,9 +84,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_mod() {
+    fn comment_trailing_item_mod() {
         let source = indoc! {r#"
             mod foo; // Foo
             mod foo2 { // Foo
@@ -108,9 +108,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_impl() {
+    fn comment_trailing_item_impl() {
         let source = indoc! {r#"
             struct Foo;
 
@@ -134,9 +134,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_func() {
+    fn comment_trailing_item_func() {
         let source = indoc! {r#"
             fn foo() { // Hello
                 println!("Hello");
@@ -152,9 +152,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_item_enum() {
+    fn comment_trailing_item_enum() {
         let source = indoc! {r#"
             enum Enum2 { // Enum2
                 A, // A variant
@@ -172,9 +172,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_trailing_const() {
+    fn comment_trailing_const() {
         let source = indoc! {r#"
             const FOO: i32 = 42; // Foo
         "#};
@@ -186,9 +186,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_comment_only_comments() {
+    fn comment_only_comments() {
         let source = indoc! {r#"
             // foo
         "#};
@@ -200,9 +200,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_multi_comment_types() {
+    fn multi_comment_types() {
         let source = indoc! {r#"
             use libfmt::Result;
 
@@ -240,9 +240,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_block_comment() {
+    fn block_comment() {
         let source = indoc! {r#"
             /**************************
              * ///  A foo struct  \\\ *
@@ -264,9 +264,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_struct_definition_with_comments_and_whitespace() {
+    fn struct_definition_with_comments_and_whitespace() {
         let source = indoc! {r#"
 
             /// A foo struct
@@ -296,9 +296,9 @@ mod tests {
         );
     }
 
-    // Feature C0001: Comments
+    // Feature F0001: Comments
     #[test]
-    fn test_only_allow_one_empty_line() {
+    fn only_allow_one_empty_line() {
         let source = indoc! {r#"
 
 

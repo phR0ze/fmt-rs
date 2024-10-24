@@ -116,7 +116,7 @@ mod tests {
     use std::borrow::Cow;
 
     #[test]
-    fn test_ring_buffer_debug() {
+    fn ring_buffer_debug() {
         let mut buf: RingBuffer<BufEntry> = RingBuffer::new();
         buf.push(BufEntry {
             token: Scan::String(Cow::Borrowed("hello")),

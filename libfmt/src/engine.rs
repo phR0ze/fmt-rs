@@ -341,7 +341,7 @@ impl Engine {
 
             match left.token {
                 Scan::String(string) => {
-                    // Feature: C0000
+                    // Feature: F0000
                     if self.skip_trailing_comma(&string) {
                         continue;
                     }
@@ -362,34 +362,6 @@ impl Engine {
         }
 
         trace!("{}", self);
-    }
-
-    /// If the given value is a comma and the scan buffer still has more tokens and the next token
-    /// is an End token, then skip the trailing comma.
-    /// * Feature: C0000
-    fn skip_trailing_comma(&self, value: &str) -> bool {
-        if !self.config.skip_trailing_comma() {
-            return false;
-        }
-
-        if value == "," && !self.scan_buf.is_empty() {
-            if !self.config.smart_wrapping() {
-                if let Some(Scan::End) = self.scan_buf.get(0).map(|x| &x.token) {
-                    if let Some(Scan::Break(_)) = self.scan_buf.get(0).map(|x| &x.token) {
-                        if let Some(Scan::End) = self.scan_buf.get(1).map(|x| &x.token) {
-                            return true;
-                        }
-                    }
-                }
-            } else {
-                if let Some(Scan::Break(_)) = self.scan_buf.get(0).map(|x| &x.token) {
-                    if let Some(Scan::End) = self.scan_buf.get(1).map(|x| &x.token) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
     }
 
     /// Grab a copy of the top of the print stack or the default outer frame if the stack is empty.
@@ -526,7 +498,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_engine() {
+    fn engine() {
         //
     }
 }

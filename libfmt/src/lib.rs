@@ -1,3 +1,6 @@
+mod F0000_skip_trailing_comma;
+mod F0001_feature_comments;
+mod F0002_feature_smart_wrap;
 pub(crate) mod attrs;
 pub(crate) mod comments;
 mod convenience;
@@ -5,8 +8,6 @@ mod data;
 mod engine;
 mod error;
 mod expr;
-mod feature_comments_tests;
-mod feature_smart_wrap;
 mod generics;
 mod item;
 mod iter;
@@ -71,55 +72,4 @@ mod tests {
     use super::*;
     use indoc::indoc;
     use tracing_test::traced_test;
-
-    // #[test]
-    // fn test_learning_breaks() {
-    //     let source = indoc! {r#"
-    //         static NUMBERS: &'static [i32] = &[
-    //             1,
-    //             2,
-    //             3,
-    //             4,
-    //             5,
-    //             6,
-    //             7,
-    //             8,
-    //             9,
-    //             10,
-    //             11,
-    //             12,
-    //             13,
-    //             14,
-    //             15,
-    //             16,
-    //             17,
-    //             18
-    //         ];
-    //     "#};
-
-    //     assert_eq!(
-    //         format_str(None, source).unwrap(),
-    //         indoc! {r#"
-    //             static NUMBERS: &'static [i32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
-    //         "#}
-    //     );
-    // }
-
-    // Feature C0000: Skip trailing comma
-    // ---------------------------------------------------------------------------------------------
-    // rustfmt: leaves a trailing comma in parameter lists
-    // Prettyplease: leaves a trailing comma in parameter lists
-    #[test]
-    fn test_skip_trailing_comma() {
-        let source = indoc! {r#"
-            println!("{}", "1",);
-        "#};
-
-        assert_eq!(
-            format_str(None, source).unwrap(),
-            indoc! {r#"
-                println!("{}", "1");
-            "#}
-        );
-    }
 }

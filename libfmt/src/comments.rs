@@ -807,7 +807,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_variant() {
+    fn trailing_variant() {
         let source = indoc! {r#"
             enum Foo {
                 A, // A variant
@@ -826,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_regular_single() {
+    fn trailing_regular_single() {
         let source = indoc! {r#"
             struct Foo; // A struct
         "#};
@@ -840,7 +840,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_field_multiple() {
+    fn trailing_field_multiple() {
         let source = indoc! {r#"
             struct Foo {
                 a: i32, // A field
@@ -865,7 +865,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_field_single() {
+    fn trailing_field_single() {
         let source = indoc! {r#"
             struct Foo {
                 a: i32, // A field
@@ -884,7 +884,7 @@ mod tests {
     }
 
     #[test]
-    fn test_skip_doc_comments() {
+    fn skip_doc_comments() {
         let source = indoc! {r#"
 
              /// A foo struct
@@ -926,7 +926,7 @@ mod tests {
     }
 
     #[test]
-    fn test_comment_blocks_include_anything_until_end() {
+    fn comment_blocks_include_anything_until_end() {
         let source = indoc! {r#"
             /****
 
@@ -949,7 +949,7 @@ mod tests {
     }
 
     #[test]
-    fn test_block_inline() {
+    fn block_inline() {
         let source = indoc! {r#"
             // Line 1
             struct Foo;
@@ -980,7 +980,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_comments() {
+    fn trailing_comments() {
         let source = indoc! {r#"
             struct Foo { // A foo struct
                 a: i32,  // Field a
@@ -1012,7 +1012,7 @@ mod tests {
     }
 
     #[test]
-    fn test_multi_comment_types() {
+    fn multi_comment_types() {
         let source = indoc! {r#"
             use indoc::indoc;
 
@@ -1056,7 +1056,7 @@ mod tests {
     }
 
     #[test]
-    fn test_simple_outer_comment() {
+    fn simple_outer_comment() {
         let source = indoc! {r#"
             // A foo struct
             struct Foo;
@@ -1071,7 +1071,7 @@ mod tests {
     }
 
     #[test]
-    fn test_only_comments() {
+    fn only_comments() {
         let source = indoc! {r#"
             // Only comments 1
             // Only comments 2
@@ -1092,7 +1092,7 @@ mod tests {
     }
 
     #[test]
-    fn test_mixing_comment_line_and_inner_and_outer_success() {
+    fn mixing_comment_line_and_inner_and_outer_success() {
         let source = indoc! {r#"
             //! Inner
             
@@ -1116,7 +1116,7 @@ mod tests {
     }
 
     #[test]
-    fn test_trailing_newline_is_not_considered_an_empty_line() {
+    fn trailing_newline_is_not_considered_an_empty_line() {
         let source = indoc! {r#"
             struct A;
 
@@ -1130,7 +1130,7 @@ mod tests {
     }
 
     #[test]
-    fn test_only_allow_single_empty_line_consecutively() {
+    fn only_allow_single_empty_line_consecutively() {
         let source = indoc! {r#"
 
 
@@ -1149,7 +1149,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tokenstream_counts_starting_from_1() {
+    fn tokenstream_counts_starting_from_1() {
         // indoc doesn't count the first line unless there is text there
         let source1 = indoc! {r#"
             1
@@ -1179,7 +1179,7 @@ mod tests {
     }
 
     #[test]
-    fn test_span_spans() {
+    fn span_spans() {
         // None
         let tokens = to_tokens(indoc! {r#" "#});
         assert_eq!(tokens.len(), 0);

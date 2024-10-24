@@ -446,7 +446,7 @@ mod tests {
     use std::str::FromStr;
 
     // #[test]
-    // fn test_is_variant_complicated() {
+    // fn is_variant_complicated() {
     //     let stream = to_tokens(indoc! {r#"
     //         enum Foo {
     //             A(String),
@@ -475,7 +475,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_variant() {
+    // fn is_variant() {
     //     let stream = to_tokens(indoc! {r#"
     //         enum Foo {
     //             A,
@@ -507,7 +507,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_field_multiple() {
+    // fn is_field_multiple() {
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo {
     //             bar: i32,
@@ -519,7 +519,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_field_generics() {
+    // fn is_field_generics() {
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo<T> {
     //             bar: Box<Option<('a &i32, T)>>,
@@ -530,7 +530,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_field_tuple_type() {
+    // fn is_field_tuple_type() {
     //     // the tuple () is considered a group and will get skipped in checking
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo {
@@ -542,7 +542,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_field() {
+    // fn is_field() {
     //     // Success
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo {
@@ -582,7 +582,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_is_statement() {
+    // fn is_statement() {
     //     // Success
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo;
@@ -604,7 +604,7 @@ mod tests {
     // }
 
     // #[test]
-    // fn test_get() {
+    // fn get() {
     //     let stream = to_tokens(indoc! {r#"
     //         struct Foo;
     //     "#});

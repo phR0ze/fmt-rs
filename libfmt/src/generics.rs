@@ -290,7 +290,15 @@ impl Engine {
                 if semi {
                     self.scan_string(";");
                 } else {
-                    self.scan_space();
+                    // Use newline to separate the signature from the body if signature was wrapped
+                    // Feature F0002: Smart wrapping
+                    if self.right_total - self.left_total > self.space {
+                        // if self.config.smart_wrapping() {
+                        self.scan_break_newline();
+                        self.offset(-self.config.indent);
+                    } else {
+                        self.scan_space();
+                    }
                 }
                 return;
             }
@@ -299,18 +307,46 @@ impl Engine {
             self.scan_break_newline();
             self.offset(-self.config.indent);
             self.scan_string("where");
-            self.scan_break_newline();
+
+            // Use space instead of newline after where keyword
+            // Feature F0002: Smart wrapping
+            if self.config.smart_wrapping() {
+                self.scan_space();
+            } else {
+                self.scan_break_newline();
+            }
+
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
                     self.scan_string(";");
+
+                // Need a final newline as we won't be using them by default in this case
+                // Feature F0002: Smart wrapping
+                // Feature F0000: Skip trailing comma
+                } else if predicate.is_last && self.config.smart_wrapping() {
+                    self.scan_break_newline();
+                    self.offset(-self.config.indent);
+
+                // Handle the normal case
                 } else {
                     self.scan_string(",");
-                    self.scan_break_newline();
+
+                    // Use space instead of newline after where predicate
+                    // Feature F0002: Smart wrapping
+                    if self.config.smart_wrapping() {
+                        self.scan_space();
+                    } else {
+                        self.scan_break_newline();
+                    }
                 }
             }
             if !semi {
-                self.offset(-self.config.indent);
+                // Offset can only be used if you have a scan_break_newline
+                // Feature F0002: Smart wrapping
+                if !self.config.smart_wrapping() {
+                    self.offset(-self.config.indent);
+                }
             }
         } else {
             self.scan_break_space();

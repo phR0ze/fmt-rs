@@ -115,7 +115,7 @@ impl Engine {
     fn expr_array(&mut self, expr: &ExprArray) {
         self.outer_attrs(&expr.attrs);
         self.scan_string("[");
-        self.scan_begin_vertical(self.config.indent);
+        self.smart_wrap_begin_default();
         self.scan_break_zero();
         for element in expr.elems.iter().delimited() {
             self.expr(&element);

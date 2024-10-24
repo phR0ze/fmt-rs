@@ -42,14 +42,12 @@ impl Engine {
 
         // Scan the macro body tokens
         if !mac.tokens.is_empty() {
-            self.smart_wrap_begin();
+            self.smart_wrap_begin_default();
+
             delimiter_break(self);
-            self.smart_wrap_body_begin();
-
-            // Scan the macro body
+            self.smart_wrap_no_begin_zero();
             self.macro_rules_tokens(mac.tokens.clone(), false);
-
-            self.smart_wrap_body_end();
+            self.smart_wrap_no_end();
             delimiter_break(self);
 
             // Reset offset back to macro root level

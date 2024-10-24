@@ -11,7 +11,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_print_frame_debug() {
+    fn print_frame_debug() {
         assert_eq!(
             format!("{:?}", PrintFrame::Fits(Flow::Vertical)),
             "Fits(Vertical)",

@@ -103,7 +103,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_with_data() {
+    fn with_data() {
         assert_eq!(
             Error::new("test").with_data("data").to_string(),
             "test: data"
@@ -111,7 +111,7 @@ mod tests {
     }
 
     #[test]
-    fn test_chain() {
+    fn chain() {
         let msg = vec![
             "top level error",
             "source error 0",

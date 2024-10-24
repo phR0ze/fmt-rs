@@ -1,4 +1,12 @@
-/// BreakToken
+/// BreakToken is used to represent a potential breakable location in the code. Depending the
+/// context the break could be ignored, or converted into some delimeter e.g. space, spaces, newline
+/// etc... Each break represents a single location in the code.
+///
+/// ### Example
+/// ```ignore
+/// foo(hello, there,
+///    good, friends);
+/// ```
 #[derive(Debug, Clone, Copy, Default)]
 pub(crate) struct BreakToken {
     /// ?
@@ -20,12 +28,12 @@ pub(crate) struct BreakToken {
     /// ?
     pub if_nonempty: bool,
 
-    /// ?
+    /// Indicates that this break should never be used. Useful for when
     pub never_break: bool,
 }
 
 impl BreakToken {
-    /// Create a new BreakToken with the neverbreak flag set
+    /// Create a new BreakToken with the never_break flag set
     pub fn never() -> Self {
         Self {
             never_break: true,
@@ -47,7 +55,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_break_token_debug() {
+    fn break_token_debug() {
         let token = BreakToken {
             offset: 4,
             blank_space: 2,

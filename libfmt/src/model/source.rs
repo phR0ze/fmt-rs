@@ -232,7 +232,7 @@ mod tests {
     }
 
     #[test]
-    fn test_next_newline() {
+    fn next_newline() {
         let source = Source::new("Hello\nFoo\n");
         assert_eq!(
             source.inc_past_newline(pos(0, 0), Position::max()),
@@ -245,7 +245,7 @@ mod tests {
     }
 
     #[test]
-    fn test_char_is() {
+    fn char_is() {
         let source = Source::new("Hello\nFoo\n");
         assert_eq!(source.char_at_is((0, 0), 'H'), true);
         assert_eq!(source.char_at_is((0, 4), 'o'), true);
@@ -254,7 +254,7 @@ mod tests {
     }
 
     #[test]
-    fn test_str() {
+    fn str() {
         let mut source = Source::new("Hello\nFoo\n");
         assert_eq!(source.str((0, 5)), Some("Hello".to_string()));
 
@@ -271,7 +271,7 @@ mod tests {
     }
 
     #[test]
-    fn test_inc() {
+    fn inc() {
         let mut source = Source::new("Hello!\nWorld\n");
         assert_eq!(source.curr(), Some(&'H'));
 
@@ -316,7 +316,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dec() {
+    fn dec() {
         let source = Source::new("Hello!\nWorld\n");
 
         // Invalid position should default to end
@@ -337,7 +337,7 @@ mod tests {
     }
 
     #[test]
-    fn test_set_pos() {
+    fn set_pos() {
         let mut source = Source::new("Hello\nFoo\n");
 
         // Exists start
@@ -363,7 +363,7 @@ mod tests {
     }
 
     #[test]
-    fn test_get() {
+    fn get() {
         let source = Source::new("Hello, World!\nThis is a test.\n");
         assert_eq!(source.get((0, 0)), Some(&'H'));
         assert_eq!(source.get((0, 7)), Some(&'W'));
@@ -374,7 +374,7 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_source() {
+    fn empty_source() {
         let mut source = Source::new("");
         assert_eq!(source.get((1, 5)), None);
         assert_eq!(source.str((1, 5)), None);

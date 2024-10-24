@@ -1,7 +1,7 @@
 # libfmt
 
 ## Current
-* [ ] C0002: Smart wrapping
+* [ ] F0002: Smart wrapping
   * [ ] Wrap at the maximum line length using standard indent on next line
   * [ ] Function declarations should bump open brace to next line if params are wrapped
 
@@ -18,7 +18,7 @@
 ## Completed
 Each completed task has an associated issue number used for tracking changes to the code.
 
-* [x] **C0001**: Initial support for comments
+* [x] **F0001**: Initial support for comments
   * Support empty line comments
     ```rust
     println!("{}", "1");
@@ -42,7 +42,7 @@ Each completed task has an associated issue number used for tracking changes to 
     println!("{}", "1"); // This is a trailing comment
     ```
 
-* [x] C0000: Skip parameter trailing comma
+* [x] F0000: Skip trailing comma
   ```rust
   // rustfmt leaves a trailing comma after parameter lists
   println!("{}", "1",);

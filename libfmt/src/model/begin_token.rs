@@ -65,7 +65,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_begin_token_debug_output() {
+    fn begin_token_debug_output() {
         let token = BeginToken {
             offset: 4,
             flow: Flow::Vertical,
@@ -77,7 +77,7 @@ mod tests {
     }
 
     #[test]
-    fn test_flow_debug_output() {
+    fn flow_debug_output() {
         assert_eq!(format!("{:?}", Flow::Vertical), "Vertical",);
         assert_eq!(format!("{:?}", Flow::Horizontal), "Horizontal",);
     }
