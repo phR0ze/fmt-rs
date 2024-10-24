@@ -84,7 +84,7 @@ impl Engine {
             self.scan_string("::");
         }
         self.scan_string("<");
-        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_vertical(self.config.indent);
         self.zerobreak();
 
         // Print lifetimes before types/consts/bindings, regardless of their
@@ -144,7 +144,7 @@ impl Engine {
         if let Some(generics) = &constraint.generics {
             self.angle_bracketed_generic_arguments(generics, PathKind::Type);
         }
-        self.scan_begin_inconsistent(self.config.indent);
+        self.scan_begin_horizontal(self.config.indent);
         for bound in constraint.bounds.iter().delimited() {
             if bound.is_first {
                 self.scan_string(": ");
@@ -158,7 +158,7 @@ impl Engine {
     }
 
     fn parenthesized_generic_arguments(&mut self, arguments: &ParenthesizedGenericArguments) {
-        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_vertical(self.config.indent);
         self.scan_string("(");
         self.zerobreak();
         for ty in arguments.inputs.iter().delimited() {

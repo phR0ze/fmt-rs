@@ -1,20 +1,20 @@
 use crate::engine::{Engine, SIZE_INFINITY};
-use crate::model::{BeginToken, Break, BreakToken};
+use crate::model::{BeginToken, BreakToken, Flow};
 
 impl Engine {
-    /// Begin tracking block, automatically break with the given indent in a inconsistent mmaner
-    pub fn scan_begin_inconsistent(&mut self, indent: isize) {
+    /// Begin tracking block using a horizontal flow for any breaks
+    pub fn scan_begin_horizontal(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
-            breaks: Break::Inconsistent,
+            flow: Flow::Horizontal,
         });
     }
 
-    /// Begin tracking block, automatically break with the given indent in a consistent mmaner
-    pub fn scan_begin_consistent(&mut self, indent: isize) {
+    /// Begin tracking block using a vertical flow for any breaks
+    pub fn scan_begin_vertical(&mut self, indent: isize) {
         self.scan_begin(BeginToken {
             offset: indent,
-            breaks: Break::Consistent,
+            flow: Flow::Vertical,
         });
     }
 

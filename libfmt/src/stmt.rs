@@ -6,7 +6,7 @@ impl Engine {
         match stmt {
             Stmt::Local(local) => {
                 self.outer_attrs(&local.attrs);
-                self.scan_begin_inconsistent(0);
+                self.scan_begin_horizontal(0);
                 self.scan_string("let ");
                 self.pat(&local.pat);
                 if let Some(local_init) = &local.init {
@@ -19,13 +19,13 @@ impl Engine {
                         self.scan_end();
                         self.neverbreak();
                         if let Expr::Block(expr) = diverge.as_ref() {
-                            self.scan_begin_consistent(self.config.indent);
+                            self.scan_begin_vertical(self.config.indent);
                             self.small_block(&expr.block, &[]);
                             self.scan_end();
                         } else {
                             self.scan_string("{");
                             self.scan_space();
-                            self.scan_begin_inconsistent(self.config.indent);
+                            self.scan_begin_horizontal(self.config.indent);
                             self.expr(diverge);
                             self.scan_end();
                             self.scan_space();
@@ -44,7 +44,7 @@ impl Engine {
             Stmt::Item(item) => self.item(item),
             Stmt::Expr(expr, None) => {
                 if break_after(expr) {
-                    self.scan_begin_inconsistent(0);
+                    self.scan_begin_horizontal(0);
                     self.expr_beginning_of_line(expr, true);
                     if add_semi(expr) {
                         self.scan_string(";");
@@ -61,7 +61,7 @@ impl Engine {
                         return;
                     }
                 }
-                self.scan_begin_inconsistent(0);
+                self.scan_begin_horizontal(0);
                 self.expr_beginning_of_line(expr, true);
                 if !remove_semi(expr) {
                     self.scan_string(";");

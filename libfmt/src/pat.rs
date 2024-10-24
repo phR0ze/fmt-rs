@@ -49,20 +49,20 @@ impl Engine {
 
     fn pat_or(&mut self, pat: &PatOr) {
         self.outer_attrs(&pat.attrs);
-        let mut consistent_break = false;
+        let mut vertical_flow = false;
         for case in &pat.cases {
             match case {
                 Pat::Lit(_) | Pat::Wild(_) => {}
                 _ => {
-                    consistent_break = true;
+                    vertical_flow = true;
                     break;
                 }
             }
         }
-        if consistent_break {
-            self.scan_begin_consistent(0);
+        if vertical_flow {
+            self.scan_begin_vertical(0);
         } else {
-            self.scan_begin_inconsistent(0);
+            self.scan_begin_horizontal(0);
         }
         for case in pat.cases.iter().delimited() {
             if !case.is_first {
@@ -107,7 +107,7 @@ impl Engine {
 
     fn pat_struct(&mut self, pat: &PatStruct) {
         self.outer_attrs(&pat.attrs);
-        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_vertical(self.config.indent);
         self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string(" {");
         self.space_if_nonempty();
@@ -127,7 +127,7 @@ impl Engine {
     fn pat_tuple(&mut self, pat: &PatTuple) {
         self.outer_attrs(&pat.attrs);
         self.scan_string("(");
-        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_vertical(self.config.indent);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
@@ -149,7 +149,7 @@ impl Engine {
         self.outer_attrs(&pat.attrs);
         self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string("(");
-        self.scan_begin_consistent(self.config.indent);
+        self.scan_begin_vertical(self.config.indent);
         self.zerobreak();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
@@ -170,70 +170,6 @@ impl Engine {
     #[cfg(not(feature = "verbatim"))]
     fn pat_verbatim(&mut self, pat: &TokenStream) {
         unimplemented!("Pat::Verbatim `{}`", pat);
-    }
-
-    #[cfg(feature = "verbatim")]
-    fn pat_verbatim(&mut self, tokens: &TokenStream) {
-        use syn::parse::{Parse, ParseStream, Result};
-        use syn::{braced, Attribute, Block, Token};
-
-        enum PatVerbatim {
-            Ellipsis,
-            Box(Pat),
-            Const(PatConst),
-        }
-
-        struct PatConst {
-            attrs: Vec<Attribute>,
-            block: Block,
-        }
-
-        impl Parse for PatVerbatim {
-            fn parse(input: ParseStream) -> Result<Self> {
-                let lookahead = input.lookahead1();
-                if lookahead.peek(Token![box]) {
-                    input.parse::<Token![box]>()?;
-                    let inner = Pat::parse_single(input)?;
-                    Ok(PatVerbatim::Box(inner))
-                } else if lookahead.peek(Token![const]) {
-                    input.parse::<Token![const]>()?;
-                    let content;
-                    let brace_token = braced!(content in input);
-                    let attrs = content.call(Attribute::parse_inner)?;
-                    let stmts = content.call(Block::parse_within)?;
-                    Ok(PatVerbatim::Const(PatConst {
-                        attrs,
-                        block: Block { brace_token, stmts },
-                    }))
-                } else if lookahead.peek(Token![...]) {
-                    input.parse::<Token![...]>()?;
-                    Ok(PatVerbatim::Ellipsis)
-                } else {
-                    Err(lookahead.error())
-                }
-            }
-        }
-
-        let pat: PatVerbatim = match syn::parse2(tokens.clone()) {
-            Ok(pat) => pat,
-            Err(_) => unimplemented!("Pat::Verbatim `{}`", tokens),
-        };
-
-        match pat {
-            PatVerbatim::Ellipsis => {
-                self.scan_string("...");
-            }
-            PatVerbatim::Box(pat) => {
-                self.scan_string("box ");
-                self.pat(&pat);
-            }
-            PatVerbatim::Const(pat) => {
-                self.scan_string("const ");
-                self.scan_begin_consistent(self.config.indent);
-                self.small_block(&pat.block, &pat.attrs);
-                self.scan_end();
-            }
-        }
     }
 
     fn pat_wild(&mut self, pat: &PatWild) {

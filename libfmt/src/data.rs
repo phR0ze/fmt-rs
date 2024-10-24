@@ -11,7 +11,7 @@ impl Engine {
             Fields::Named(fields) => {
                 self.nbsp();
                 self.scan_string("{");
-                self.scan_begin_consistent(self.config.indent);
+                self.scan_begin_vertical(self.config.indent);
                 self.scan_space();
                 for field in fields.named.iter().delimited() {
                     self.scan_field(&field);
@@ -22,7 +22,7 @@ impl Engine {
                 self.scan_string("}");
             }
             Fields::Unnamed(fields) => {
-                self.scan_begin_consistent(self.config.indent);
+                self.scan_begin_vertical(self.config.indent);
                 self.fields_unnamed(fields);
                 self.scan_end();
             }

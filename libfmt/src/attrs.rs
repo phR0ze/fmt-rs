@@ -185,7 +185,7 @@ impl Engine {
                     match delimiter {
                         Delimiter::Parenthesis => {
                             self.scan_string("(");
-                            self.scan_begin_consistent(self.config.indent);
+                            self.scan_begin_vertical(self.config.indent);
                             self.zerobreak();
                             state = Punct;
                         }

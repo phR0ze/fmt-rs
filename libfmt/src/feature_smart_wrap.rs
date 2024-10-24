@@ -5,9 +5,9 @@ impl Engine {
     /// * Features C0002: Smart wrapping
     pub fn smart_wrap_begin(&mut self) {
         if !self.config.smart_wrapping() {
-            self.scan_begin_consistent(self.config.indent);
+            self.scan_begin_vertical(self.config.indent);
         } else {
-            self.scan_begin_inconsistent(self.config.indent);
+            self.scan_begin_horizontal(self.config.indent);
         }
     }
 
@@ -15,7 +15,7 @@ impl Engine {
     /// * Features C0002: Smart wrapping
     pub fn smart_wrap_body_begin(&mut self) {
         if !self.config.smart_wrapping() {
-            self.scan_begin_inconsistent(0);
+            self.scan_begin_horizontal(0);
         }
     }
 

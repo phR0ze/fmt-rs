@@ -16,7 +16,7 @@ impl Engine {
         }
 
         self.scan_string("<");
-        self.scan_begin_consistent(0);
+        self.scan_begin_vertical(0);
         self.zerobreak();
 
         // Print lifetimes before types and consts, regardless of their
@@ -82,7 +82,7 @@ impl Engine {
     fn type_param(&mut self, type_param: &TypeParam) {
         self.outer_attrs(&type_param.attrs);
         self.ident(&type_param.ident);
-        self.scan_begin_inconsistent(self.config.indent);
+        self.scan_begin_horizontal(self.config.indent);
         for type_param_bound in type_param.bounds.iter().delimited() {
             if type_param_bound.is_first {
                 self.scan_string(": ");
@@ -347,9 +347,9 @@ impl Engine {
         self.ty(&predicate.bounded_ty);
         self.scan_string(":");
         if predicate.bounds.len() == 1 {
-            self.scan_begin_inconsistent(0);
+            self.scan_begin_horizontal(0);
         } else {
-            self.scan_begin_inconsistent(self.config.indent);
+            self.scan_begin_horizontal(self.config.indent);
         }
         for type_param_bound in predicate.bounds.iter().delimited() {
             if type_param_bound.is_first {
@@ -366,7 +366,7 @@ impl Engine {
     fn predicate_lifetime(&mut self, predicate: &PredicateLifetime) {
         self.lifetime(&predicate.lifetime);
         self.scan_string(":");
-        self.scan_begin_inconsistent(self.config.indent);
+        self.scan_begin_horizontal(self.config.indent);
         for lifetime in predicate.bounds.iter().delimited() {
             if lifetime.is_first {
                 self.nbsp();

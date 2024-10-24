@@ -175,7 +175,7 @@ impl Engine {
         trace!("{}", self);
     }
 
-    /// Marks a potential break in the code by pushing a BreakToken onto the scan buffer and tracks
+    /// Marks a *potential* break in the code by pushing a BreakToken onto the scan buffer and tracks
     /// it's index on the scan stack.
     /// * Used for: Comma, Semicolon, etc...
     pub fn scan_break(&mut self, token: BreakToken) {
@@ -394,7 +394,7 @@ impl Engine {
 
     /// Grab a copy of the top of the print stack or the default outer frame if the stack is empty.
     fn get_top(&self) -> PrintFrame {
-        const OUTER: PrintFrame = PrintFrame::Broken(0, Break::Inconsistent);
+        const OUTER: PrintFrame = PrintFrame::Broken(0, Flow::Horizontal);
         self.print_stack.last().map_or(OUTER, PrintFrame::clone)
     }
 
@@ -403,10 +403,10 @@ impl Engine {
 
         if size > self.space {
             self.print_stack
-                .push(PrintFrame::Broken(self.indent, token.breaks));
+                .push(PrintFrame::Broken(self.indent, token.flow));
             self.indent = usize::try_from(self.indent as isize + token.offset).unwrap();
         } else {
-            self.print_stack.push(PrintFrame::Fits(token.breaks));
+            self.print_stack.push(PrintFrame::Fits(token.flow));
         }
     }
 
@@ -432,8 +432,8 @@ impl Engine {
         let fits = token.never_break
             || match self.get_top() {
                 PrintFrame::Fits(..) => true,
-                PrintFrame::Broken(.., Break::Consistent) => false,
-                PrintFrame::Broken(.., Break::Inconsistent) => size <= self.space,
+                PrintFrame::Broken(.., Flow::Vertical) => false,
+                PrintFrame::Broken(.., Flow::Horizontal) => size <= self.space,
             };
         if fits {
             self.pending_indentation += token.blank_space;

@@ -53,7 +53,7 @@ impl Engine {
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)
             .map_err(|e| Error::new("failed to parse token stream into syntax tree").wrap_syn(e))?;
-        self.scan_begin_consistent(0);
+        self.scan_begin_vertical(0);
 
         // Check for any inner attributes for the file
         self.inner_attrs(&ast.attrs);
@@ -71,6 +71,39 @@ mod tests {
     use super::*;
     use indoc::indoc;
     use tracing_test::traced_test;
+
+    // #[test]
+    // fn test_learning_breaks() {
+    //     let source = indoc! {r#"
+    //         static NUMBERS: &'static [i32] = &[
+    //             1,
+    //             2,
+    //             3,
+    //             4,
+    //             5,
+    //             6,
+    //             7,
+    //             8,
+    //             9,
+    //             10,
+    //             11,
+    //             12,
+    //             13,
+    //             14,
+    //             15,
+    //             16,
+    //             17,
+    //             18
+    //         ];
+    //     "#};
+
+    //     assert_eq!(
+    //         format_str(None, source).unwrap(),
+    //         indoc! {r#"
+    //             static NUMBERS: &'static [i32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
+    //         "#}
+    //     );
+    // }
 
     // Feature C0000: Skip trailing comma
     // ---------------------------------------------------------------------------------------------
