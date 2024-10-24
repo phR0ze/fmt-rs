@@ -116,7 +116,7 @@ impl Engine {
         trace!("Print");
 
         if !self.scan_blocks.is_empty() {
-            self.update_block_depth_size(0);
+            self.update_scan_block_depth_size(0);
             self.print_any();
         }
         self.out
@@ -191,7 +191,7 @@ impl Engine {
             self.right_total = 1;
             self.scan_buf.clear();
         } else {
-            self.update_block_depth_size(0);
+            self.update_scan_block_depth_size(0);
         }
         let right = self.scan_buf.push(BufEntry {
             token: Scan::Break(token),
@@ -304,7 +304,7 @@ impl Engine {
     }
 
     /// Update the last control token's (Begin, End, Break) depth and size
-    pub(crate) fn update_block_depth_size(&mut self, mut depth: usize) {
+    pub(crate) fn update_scan_block_depth_size(&mut self, mut depth: usize) {
         trace!("Update block depth/size");
 
         while let Some(&index) = self.scan_blocks.back() {
