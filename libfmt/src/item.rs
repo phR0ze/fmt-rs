@@ -93,9 +93,6 @@ impl Engine {
         self.outer_attrs(&item.attrs);
         self.smart_wrap_begin_default();
 
-        // Feature F0002: Smart wrapping
-        self.reset_wrap_tracker();
-
         self.visibility(&item.vis);
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
@@ -722,8 +719,10 @@ impl Engine {
         self.scan_string("(");
         self.scan_break_never();
 
-        // Signature params
+        // Expand horizontally rather than vertically
+        // Feature F0002: Smart wrapping
         self.smart_wrap_begin_zero();
+
         self.scan_break_zero();
         for input in signature.inputs.iter().delimited() {
             self.fn_arg(&input);
@@ -734,7 +733,12 @@ impl Engine {
             self.variadic(variadic);
             self.scan_break_zero();
         }
-        self.update_break_offset(-self.config.indent);
+
+        // No offset needed if we don't newline above for smart wrapping
+        // Feature F0002: Smart wrapping
+        if !self.config.smart_wrapping() {
+            self.update_break_offset(-self.config.indent);
+        }
         self.scan_end();
 
         self.scan_string(")");

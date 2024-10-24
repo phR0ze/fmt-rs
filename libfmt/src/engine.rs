@@ -86,10 +86,6 @@ pub struct Engine {
 
     /// Print related field for indentation to avoid writing trailing whitespace
     pub(crate) pending_indentation: usize,
-
-    /// Track if a line was wrapped due to hitting the max line width.
-    /// Warning: this is only useful in small blocks of code where we are resetting it appropriately.
-    pub(crate) wrapped: bool,
 }
 
 impl Engine {
@@ -107,7 +103,6 @@ impl Engine {
             print_stack: Vec::new(),
             indent: 0,
             pending_indentation: 0,
-            wrapped: false,
         }
     }
 
@@ -116,7 +111,7 @@ impl Engine {
         trace!("Print");
 
         if !self.scan_blocks.is_empty() {
-            self.update_scan_block_depth_size(0);
+            self.update_scan_block_depth_and_size(0);
             self.print_any();
         }
         self.out
@@ -191,7 +186,7 @@ impl Engine {
             self.right_total = 1;
             self.scan_buf.clear();
         } else {
-            self.update_scan_block_depth_size(0);
+            self.update_scan_block_depth_and_size(0);
         }
         let right = self.scan_buf.push(BufEntry {
             token: Scan::Break(token),
@@ -285,8 +280,6 @@ impl Engine {
 
         // While the current stream is longer than the allowed max width
         while self.right_total - self.left_total > self.space {
-            self.wrapped = true; // blindly set here. users will need to reset when done with it
-
             // Pop the first element from the scan stack if it is also the first
             // element in the scan buffer, then update the scan buffer element's size to infinity.
             if *self.scan_blocks.front().unwrap() == self.scan_buf.index_of_first() {
@@ -304,7 +297,7 @@ impl Engine {
     }
 
     /// Update the last control token's (Begin, End, Break) depth and size
-    pub(crate) fn update_scan_block_depth_size(&mut self, mut depth: usize) {
+    pub(crate) fn update_scan_block_depth_and_size(&mut self, mut depth: usize) {
         trace!("Update block depth/size");
 
         while let Some(&index) = self.scan_blocks.back() {

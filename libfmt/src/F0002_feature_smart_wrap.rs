@@ -1,11 +1,6 @@
 use crate::engine::Engine;
 
 impl Engine {
-    /// Set wrapped to false
-    pub fn reset_wrap_tracker(&mut self) {
-        self.wrapped = false;
-    }
-
     /// Smart wrapping for block begin falling back on original behavior if disabled.
     /// * Features F0002: Smart wrapping
     pub fn smart_wrap_begin_default(&mut self) {
