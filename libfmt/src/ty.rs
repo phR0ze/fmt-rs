@@ -61,7 +61,7 @@ impl Engine {
             self.bare_variadic(variadic);
             self.scan_break_zero();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
         self.return_type(&ty.output);
@@ -157,7 +157,7 @@ impl Engine {
                 self.trailing_comma(elem.is_last);
             }
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
     }

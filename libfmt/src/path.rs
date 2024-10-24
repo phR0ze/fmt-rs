@@ -116,7 +116,7 @@ impl Engine {
             }
         }
 
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string(">");
     }
@@ -165,7 +165,7 @@ impl Engine {
             self.ty(&ty);
             self.trailing_comma(ty.is_last);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_string(")");
         self.return_type(&arguments.output);
         self.scan_end();

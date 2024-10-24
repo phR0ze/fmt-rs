@@ -115,13 +115,29 @@ impl Engine {
     fn expr_array(&mut self, expr: &ExprArray) {
         self.outer_attrs(&expr.attrs);
         self.scan_string("[");
+
+        // Feature F0002: Smart wrapping
         self.smart_wrap_begin_default();
+        //self.scan_begin_vertical(self.config.indent);
+
+        // TEST
+        // self.scan_break(BreakToken {
+        //     offset: -self.config.indent,
+        //     pre_break: Some('8'),
+        //     post_break: Some('9'),
+        //     ..BreakToken::default()
+        // });
         self.scan_break_zero();
         for element in expr.elems.iter().delimited() {
             self.expr(&element);
             self.trailing_comma(element.is_last);
         }
-        self.offset(-self.config.indent);
+
+        // No need for offset if we don't newline above
+        // Feature F0002: Smart wrapping
+        if !self.config.smart_wrapping() {
+            self.update_break_offset(-self.config.indent);
+        }
         self.scan_end();
         self.scan_string("]");
     }
@@ -258,7 +274,7 @@ impl Engine {
             ReturnType::Default => {
                 self.scan_string("|");
                 self.scan_break_space();
-                self.offset(-self.config.indent);
+                self.update_break_offset(-self.config.indent);
                 self.scan_end();
                 self.scan_break_never();
                 let wrap_in_brace = match &*expr.body {
@@ -289,7 +305,7 @@ impl Engine {
             ReturnType::Type(_arrow, ty) => {
                 if !expr.inputs.is_empty() {
                     self.trailing_comma(true);
-                    self.offset(-self.config.indent);
+                    self.update_break_offset(-self.config.indent);
                 }
                 self.scan_string("|");
                 self.scan_end();
@@ -353,7 +369,7 @@ impl Engine {
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_end();
@@ -400,7 +416,7 @@ impl Engine {
                         self.expr(other);
                         self.scan_end();
                         self.scan_break_space();
-                        self.offset(-self.config.indent);
+                        self.update_break_offset(-self.config.indent);
                         self.scan_string("}");
                     }
                 }
@@ -414,7 +430,7 @@ impl Engine {
             for stmt in &expr.then_branch.stmts {
                 self.stmt(stmt);
             }
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_string("}");
         }
         self.scan_end();
@@ -479,7 +495,7 @@ impl Engine {
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
     }
@@ -504,7 +520,7 @@ impl Engine {
             self.arm(arm);
             self.scan_break_newline();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_end();
@@ -612,7 +628,7 @@ impl Engine {
             self.expr(rest);
             self.scan_break_space();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.end_with_max_width(34);
         self.scan_string("}");
     }
@@ -650,7 +666,7 @@ impl Engine {
                 self.trailing_comma(elem.is_last);
             }
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string(")");
     }
@@ -691,7 +707,7 @@ impl Engine {
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
     }
@@ -768,7 +784,7 @@ impl Engine {
             for stmt in &body.block.stmts {
                 self.stmt(stmt);
             }
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_end();
             self.scan_string("}");
             self.scan_end();
@@ -806,7 +822,7 @@ impl Engine {
                     self.expr(&arg);
                     self.trailing_comma(arg.is_last);
                 }
-                self.offset(-self.config.indent);
+                self.update_break_offset(-self.config.indent);
                 self.scan_end();
             }
         }
@@ -830,7 +846,7 @@ impl Engine {
                     }
                 }
             }
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
         }
         self.scan_string("}");
     }

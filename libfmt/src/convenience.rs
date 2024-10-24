@@ -53,6 +53,9 @@ impl Engine {
     /// Add a break to the buffer that will use a newline in the final printing of the code
     pub fn scan_break_newline(&mut self) {
         self.scan_break_spaces(SIZE_INFINITY as usize);
+
+        // Every newline would need a wrap tracker reset
+        self.reset_wrap_tracker();
     }
 
     /// Add a break to the buffer that will use a single space if the break is used if the buffer is
@@ -72,6 +75,9 @@ impl Engine {
             if_nonempty: true,
             ..BreakToken::default()
         });
+
+        // Every newline would need a wrap tracker reset
+        self.reset_wrap_tracker();
     }
 
     pub fn trailing_comma(&mut self, is_last: bool) {

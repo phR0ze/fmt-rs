@@ -1,6 +1,11 @@
 use crate::engine::Engine;
 
 impl Engine {
+    /// Set wrapped to false
+    pub fn reset_wrap_tracker(&mut self) {
+        self.wrapped = false;
+    }
+
     /// Smart wrapping for block begin falling back on original behavior if disabled.
     /// * Features F0002: Smart wrapping
     pub fn smart_wrap_begin_default(&mut self) {
@@ -202,7 +207,10 @@ mod tests {
                     "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18");
             "#},
         );
+    }
 
+    #[test]
+    fn item_nested_macro() {
         let source = indoc! {r#"
             impl fmt::Display for Example {
                 fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

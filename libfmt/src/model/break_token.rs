@@ -16,10 +16,10 @@ pub(crate) struct BreakToken {
     /// * SIZE_INFINITY is used to indicate that the break should be a newline instead
     pub blank_space: usize,
 
-    /// ?
+    /// Optionally insert this character before the break
     pub pre_break: Option<char>,
 
-    /// ?
+    /// Optionally insert this character after the break
     pub post_break: Option<char>,
 
     /// ?
@@ -28,7 +28,7 @@ pub(crate) struct BreakToken {
     /// ?
     pub if_nonempty: bool,
 
-    /// Indicates that this break should never be used. Useful for when
+    /// Indicates that this break should never be used.
     pub never_break: bool,
 }
 

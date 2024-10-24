@@ -208,7 +208,7 @@ impl Engine {
                             if state != TrailingComma {
                                 self.scan_break_zero();
                             }
-                            self.offset(-self.config.indent);
+                            self.update_break_offset(-self.config.indent);
                             self.scan_end();
                             self.scan_string(")");
                             state = Punct;

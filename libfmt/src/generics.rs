@@ -42,7 +42,7 @@ impl Engine {
             }
         }
 
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string(">");
     }
@@ -292,20 +292,19 @@ impl Engine {
                 } else {
                     // Use newline to separate the signature from the body if signature was wrapped
                     // Feature F0002: Smart wrapping
-                    if self.right_total - self.left_total > self.space {
-                        // if self.config.smart_wrapping() {
-                        self.scan_break_newline();
-                        self.offset(-self.config.indent);
-                    } else {
-                        self.scan_space();
-                    }
+                    // if self.wrapped && self.config.smart_wrapping() {
+                    //     self.scan_break_newline();
+                    //     self.offset(-self.config.indent);
+                    // } else {
+                    self.scan_space();
+                    // }
                 }
                 return;
             }
         };
         if hardbreaks {
             self.scan_break_newline();
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_string("where");
 
             // Use space instead of newline after where keyword
@@ -326,7 +325,7 @@ impl Engine {
                 // Feature F0000: Skip trailing comma
                 } else if predicate.is_last && self.config.smart_wrapping() {
                     self.scan_break_newline();
-                    self.offset(-self.config.indent);
+                    self.update_break_offset(-self.config.indent);
 
                 // Handle the normal case
                 } else {
@@ -345,12 +344,12 @@ impl Engine {
                 // Offset can only be used if you have a scan_break_newline
                 // Feature F0002: Smart wrapping
                 if !self.config.smart_wrapping() {
-                    self.offset(-self.config.indent);
+                    self.update_break_offset(-self.config.indent);
                 }
             }
         } else {
             self.scan_break_space();
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_string("where");
             self.scan_break_space();
             for predicate in where_clause.predicates.iter().delimited() {
@@ -362,7 +361,7 @@ impl Engine {
                 }
             }
             if !semi {
-                self.offset(-self.config.indent);
+                self.update_break_offset(-self.config.indent);
             }
         }
     }

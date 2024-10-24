@@ -29,7 +29,7 @@ impl Engine {
                             self.expr(diverge);
                             self.scan_end();
                             self.scan_break_space();
-                            self.offset(-self.config.indent);
+                            self.update_break_offset(-self.config.indent);
                             self.scan_string("}");
                         }
                     } else {

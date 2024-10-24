@@ -51,7 +51,7 @@ impl Engine {
             delimiter_break(self);
 
             // Reset offset back to macro root level
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_end();
         }
 
@@ -95,7 +95,7 @@ impl Engine {
                         self.macro_rules_tokens(stream, true);
                         self.scan_end();
                         self.scan_break_zero();
-                        self.offset(-self.config.indent);
+                        self.update_break_offset(-self.config.indent);
                         self.scan_end();
                     }
                     self.delimiter_close(delimiter);
@@ -119,7 +119,7 @@ impl Engine {
                         self.macro_rules_tokens(stream, false);
                         self.scan_end();
                         self.scan_break_newline();
-                        self.offset(-self.config.indent);
+                        self.update_break_offset(-self.config.indent);
                         self.scan_end();
                     }
                     self.scan_string("}");
@@ -141,7 +141,7 @@ impl Engine {
             }
             _ => self.scan_break_newline(),
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
     }

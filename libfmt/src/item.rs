@@ -70,7 +70,7 @@ impl Engine {
             self.scan_trailing_comment(&variant.attrs);
             self.scan_break_newline();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -92,6 +92,10 @@ impl Engine {
     fn item_fn(&mut self, item: &ItemFn) {
         self.outer_attrs(&item.attrs);
         self.smart_wrap_begin_default();
+
+        // Feature F0002: Smart wrapping
+        self.reset_wrap_tracker();
+
         self.visibility(&item.vis);
         self.signature(&item.sig);
         self.where_clause_for_body(&item.sig.generics.where_clause);
@@ -103,7 +107,7 @@ impl Engine {
         for stmt in &item.block.stmts {
             self.stmt(stmt);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -122,7 +126,7 @@ impl Engine {
         for foreign_item in &item.items {
             self.foreign_item(foreign_item);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -161,7 +165,7 @@ impl Engine {
         for impl_item in &item.items {
             self.impl_item(impl_item);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -192,7 +196,7 @@ impl Engine {
             for item in items {
                 self.item(item);
             }
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_end();
             self.scan_string("}");
         } else {
@@ -243,7 +247,7 @@ impl Engine {
                     self.scan_break_newline();
                 }
 
-                self.offset(-self.config.indent);
+                self.update_break_offset(-self.config.indent);
                 self.scan_end();
                 self.scan_string("}");
             }
@@ -292,7 +296,7 @@ impl Engine {
         for trait_item in &item.items {
             self.trait_item(trait_item);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -352,7 +356,7 @@ impl Engine {
             self.scan_string(",");
             self.scan_break_newline();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -441,7 +445,7 @@ impl Engine {
             }
             self.scan_end();
             self.trailing_comma(true);
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_string("}");
             self.scan_end();
         }
@@ -554,7 +558,7 @@ impl Engine {
             for stmt in &block.stmts {
                 self.stmt(stmt);
             }
-            self.offset(-self.config.indent);
+            self.update_break_offset(-self.config.indent);
             self.scan_end();
             self.scan_string("}");
         } else {
@@ -658,7 +662,7 @@ impl Engine {
         for stmt in &impl_item.block.stmts {
             self.stmt(stmt);
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
         self.scan_break_newline();
@@ -730,7 +734,7 @@ impl Engine {
             self.variadic(variadic);
             self.scan_break_zero();
         }
-        self.offset(-self.config.indent);
+        self.update_break_offset(-self.config.indent);
         self.scan_end();
 
         self.scan_string(")");

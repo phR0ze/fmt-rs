@@ -71,12 +71,12 @@ pub struct Engine {
     /// Always starts at 1
     pub(crate) right_total: isize,
 
-    /// Tracks the current block being scanned. Holds ring-buffer index values of the Begin that
-    /// started the current block, possibly with the most recent Break after that Begin (if there is
-    /// any) on top of it. Values are pushed and popped on the back of the queue using it like
-    /// stack, and elsewhere old values are popped from the front of the queue as they become
+    /// Tracks the current block being scanned. Holds ring-buffer index values of the ***Begin***
+    /// that started the current block, possibly with the most recent Break after that Begin (if
+    /// there is any) on top of it. Values are pushed and popped on the back of the queue using it
+    /// like stack, and elsewhere old values are popped from the front of the queue as they become
     /// irrelevant due to the primary ring-buffer advancing.
-    pub(crate) scan_stack: VecDeque<usize>,
+    pub(crate) scan_blocks: VecDeque<usize>,
 
     /// Stack of blocks-in-progress being flushed by print methods
     pub(crate) print_stack: Vec<PrintFrame>,
@@ -86,6 +86,10 @@ pub struct Engine {
 
     /// Print related field for indentation to avoid writing trailing whitespace
     pub(crate) pending_indentation: usize,
+
+    /// Track if a line was wrapped due to hitting the max line width.
+    /// Warning: this is only useful in small blocks of code where we are resetting it appropriately.
+    pub(crate) wrapped: bool,
 }
 
 impl Engine {
@@ -99,10 +103,11 @@ impl Engine {
             scan_buf: RingBuffer::new(),
             left_total: 0,
             right_total: 0,
-            scan_stack: VecDeque::new(),
+            scan_blocks: VecDeque::new(),
             print_stack: Vec::new(),
             indent: 0,
             pending_indentation: 0,
+            wrapped: false,
         }
     }
 
@@ -110,8 +115,8 @@ impl Engine {
     pub fn print(mut self) -> String {
         trace!("Print");
 
-        if !self.scan_stack.is_empty() {
-            self.check_stack(0);
+        if !self.scan_blocks.is_empty() {
+            self.update_block_depth_size(0);
             self.print_any();
         }
         self.out
@@ -123,7 +128,7 @@ impl Engine {
     pub fn scan_begin(&mut self, token: BeginToken) {
         trace!("Scan begin: {:?}", token);
 
-        if self.scan_stack.is_empty() {
+        if self.scan_blocks.is_empty() {
             self.left_total = 1;
             self.right_total = 1;
             self.scan_buf.clear();
@@ -132,7 +137,7 @@ impl Engine {
             token: Scan::Begin(token),
             size: -self.right_total,
         });
-        self.scan_stack.push_back(right);
+        self.scan_blocks.push_back(right);
 
         trace!("{}", self);
     }
@@ -143,7 +148,7 @@ impl Engine {
     pub fn scan_end(&mut self) {
         trace!("Scan end");
 
-        if self.scan_stack.is_empty() {
+        if self.scan_blocks.is_empty() {
             self.print_end();
         } else {
             if !self.scan_buf.is_empty() {
@@ -152,15 +157,15 @@ impl Engine {
                         if let Scan::Begin(_) = self.scan_buf.second_last().token {
                             self.scan_buf.pop_last();
                             self.scan_buf.pop_last();
-                            self.scan_stack.pop_back();
-                            self.scan_stack.pop_back();
+                            self.scan_blocks.pop_back();
+                            self.scan_blocks.pop_back();
                             self.right_total -= break_token.blank_space as isize;
                             return;
                         }
                     }
                     if break_token.if_nonempty {
                         self.scan_buf.pop_last();
-                        self.scan_stack.pop_back();
+                        self.scan_blocks.pop_back();
                         self.right_total -= break_token.blank_space as isize;
                     }
                 }
@@ -169,7 +174,7 @@ impl Engine {
                 token: Scan::End,
                 size: -1,
             });
-            self.scan_stack.push_back(right);
+            self.scan_blocks.push_back(right);
         }
 
         trace!("{}", self);
@@ -181,18 +186,18 @@ impl Engine {
     pub fn scan_break(&mut self, token: BreakToken) {
         trace!("Scan break: {:?}", token);
 
-        if self.scan_stack.is_empty() {
+        if self.scan_blocks.is_empty() {
             self.left_total = 1;
             self.right_total = 1;
             self.scan_buf.clear();
         } else {
-            self.check_stack(0);
+            self.update_block_depth_size(0);
         }
         let right = self.scan_buf.push(BufEntry {
             token: Scan::Break(token),
             size: -self.right_total,
         });
-        self.scan_stack.push_back(right);
+        self.scan_blocks.push_back(right);
         self.right_total += token.blank_space as isize;
 
         trace!("{}", self);
@@ -203,7 +208,7 @@ impl Engine {
         let string = string.into();
         trace!("Scan string: {:?}", string);
 
-        if self.scan_stack.is_empty() {
+        if self.scan_blocks.is_empty() {
             self.print_string(string);
         } else {
             // Store the string and its length in the scan buffer
@@ -223,7 +228,7 @@ impl Engine {
     }
 
     /// Update the previous break to include the detected offset change.
-    pub fn offset(&mut self, offset: isize) {
+    pub fn update_break_offset(&mut self, offset: isize) {
         trace!("Offset: {:?}", offset);
 
         match &mut self.scan_buf.last_mut().token {
@@ -246,7 +251,7 @@ impl Engine {
         trace!("End with max width: {:?}", max);
 
         let mut depth = 1;
-        for &index in self.scan_stack.iter().rev() {
+        for &index in self.scan_blocks.iter().rev() {
             let entry = &self.scan_buf[index];
             match entry.token {
                 Scan::Begin(_) => {
@@ -280,10 +285,12 @@ impl Engine {
 
         // While the current stream is longer than the allowed max width
         while self.right_total - self.left_total > self.space {
+            self.wrapped = true; // blindly set here. users will need to reset when done with it
+
             // Pop the first element from the scan stack if it is also the first
             // element in the scan buffer, then update the scan buffer element's size to infinity.
-            if *self.scan_stack.front().unwrap() == self.scan_buf.index_of_first() {
-                self.scan_stack.pop_front().unwrap();
+            if *self.scan_blocks.front().unwrap() == self.scan_buf.index_of_first() {
+                self.scan_blocks.pop_front().unwrap();
                 self.scan_buf.first_mut().size = SIZE_INFINITY;
             }
 
@@ -296,28 +303,33 @@ impl Engine {
         }
     }
 
-    /// ?
-    pub(crate) fn check_stack(&mut self, mut depth: usize) {
-        trace!("Check stack");
+    /// Update the last control token's (Begin, End, Break) depth and size
+    pub(crate) fn update_block_depth_size(&mut self, mut depth: usize) {
+        trace!("Update block depth/size");
 
-        while let Some(&index) = self.scan_stack.back() {
+        while let Some(&index) = self.scan_blocks.back() {
+            // Update the corresponding entry in the buffer
             let entry = &mut self.scan_buf[index];
             match entry.token {
                 Scan::Begin(_) => {
                     if depth == 0 {
                         break;
                     }
-                    self.scan_stack.pop_back().unwrap();
+                    self.scan_blocks.pop_back().unwrap();
+
+                    // Begin size gets updated with buffer enqueued character size
                     entry.size += self.right_total;
+
+                    // Depth gets decremented as this block is processed
                     depth -= 1;
                 }
                 Scan::End => {
-                    self.scan_stack.pop_back().unwrap();
+                    self.scan_blocks.pop_back().unwrap();
                     entry.size = 1;
                     depth += 1;
                 }
                 Scan::Break(_) => {
-                    self.scan_stack.pop_back().unwrap();
+                    self.scan_blocks.pop_back().unwrap();
                     entry.size += self.right_total;
                     if depth == 0 {
                         break;
@@ -365,7 +377,7 @@ impl Engine {
     }
 
     /// Grab a copy of the top of the print stack or the default outer frame if the stack is empty.
-    fn get_top(&self) -> PrintFrame {
+    fn get_print_top(&self) -> PrintFrame {
         const OUTER: PrintFrame = PrintFrame::Broken(0, Flow::Horizontal);
         self.print_stack.last().map_or(OUTER, PrintFrame::clone)
     }
@@ -396,13 +408,13 @@ impl Engine {
         trace!("Print end (out): {}", self.out);
     }
 
-    /// Evalate the given break token to determine what kind of break is needed in the final printed
+    /// Evaluate the given break token to determine what kind of break is needed in the final printed
     /// output.
     fn print_break(&mut self, token: BreakToken, size: isize) {
         trace!("Print break: {:?}", token);
 
         let fits = token.never_break
-            || match self.get_top() {
+            || match self.get_print_top() {
                 PrintFrame::Fits(..) => true,
                 PrintFrame::Broken(.., Flow::Vertical) => false,
                 PrintFrame::Broken(.., Flow::Horizontal) => size <= self.space,
@@ -483,7 +495,7 @@ impl fmt::Display for Engine {
 
         writeln!(f, "  left_total: {}", self.left_total)?;
         writeln!(f, "  right_total: {}", self.right_total)?;
-        writeln!(f, "  scan_stack: {:?}", self.scan_stack)?;
+        writeln!(f, "  scan_stack: {:?}", self.scan_blocks)?;
         writeln!(f, "  print_stack: {:?}", self.print_stack)?;
         writeln!(f, "  indent: {}", self.indent)?;
         writeln!(f, "  pending_indentation: {}", self.pending_indentation)?;
