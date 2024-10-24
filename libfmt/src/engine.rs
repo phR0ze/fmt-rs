@@ -125,7 +125,7 @@ impl Engine {
 
         if self.scan_blocks.is_empty() {
             self.left_total = 1;
-            self.right_total.set(1);
+            self.right_total.value = 1;
             self.scan_buf.clear();
         }
         let right = self.scan_buf.push(BufEntry {
@@ -183,7 +183,7 @@ impl Engine {
 
         if self.scan_blocks.is_empty() {
             self.left_total = 1;
-            self.right_total.set(1);
+            self.right_total.value = 1;
             self.scan_buf.clear();
         } else {
             self.update_scan_block_depth_and_size(0);
@@ -253,7 +253,7 @@ impl Engine {
                     depth -= 1;
                     if depth == 0 {
                         if entry.size < 0 {
-                            let actual_width = entry.size + self.right_total.isize();
+                            let actual_width = entry.size + self.right_total.value;
                             if actual_width > max {
                                 self.scan_buf.push(BufEntry {
                                     token: Scan::String(Cow::Borrowed("")),
@@ -311,7 +311,7 @@ impl Engine {
                     self.scan_blocks.pop_back().unwrap();
 
                     // Begin size gets updated with buffer enqueued character size
-                    entry.size += self.right_total.isize();
+                    entry.size += self.right_total.value;
 
                     // Depth gets decremented as this block is processed
                     depth -= 1;
@@ -323,7 +323,7 @@ impl Engine {
                 }
                 Scan::Break(_) => {
                     self.scan_blocks.pop_back().unwrap();
-                    entry.size += self.right_total.isize();
+                    entry.size += self.right_total.value;
                     if depth == 0 {
                         break;
                     }
@@ -487,7 +487,7 @@ impl fmt::Display for Engine {
         )?;
 
         writeln!(f, "  left_total: {}", self.left_total)?;
-        writeln!(f, "  right_total: {}", self.right_total.isize())?;
+        writeln!(f, "  right_total: {}", self.right_total.value)?;
         writeln!(f, "  scan_stack: {:?}", self.scan_blocks)?;
         writeln!(f, "  print_stack: {:?}", self.print_stack)?;
         writeln!(f, "  indent: {}", self.indent)?;
