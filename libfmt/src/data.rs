@@ -9,10 +9,10 @@ impl Engine {
         self.ident(&variant.ident);
         match &variant.fields {
             Fields::Named(fields) => {
-                self.nbsp();
+                self.scan_space();
                 self.scan_string("{");
                 self.scan_begin_vertical(self.config.indent);
-                self.scan_space();
+                self.scan_space_break();
                 for field in fields.named.iter().delimited() {
                     self.scan_field(&field);
                     self.trailing_comma_or_space(field.is_last);
@@ -36,7 +36,7 @@ impl Engine {
 
     pub fn fields_unnamed(&mut self, fields: &FieldsUnnamed) {
         self.scan_string("(");
-        self.zerobreak();
+        self.scan_zero_break();
         for field in fields.unnamed.iter().delimited() {
             self.scan_field(&field);
             self.trailing_comma(field.is_last);

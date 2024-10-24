@@ -52,14 +52,14 @@ impl Engine {
         }
         self.scan_string("fn(");
         self.scan_begin_vertical(self.config.indent);
-        self.zerobreak();
+        self.scan_zero_break();
         for bare_fn_arg in ty.inputs.iter().delimited() {
             self.bare_fn_arg(&bare_fn_arg);
             self.trailing_comma(bare_fn_arg.is_last && ty.variadic.is_none());
         }
         if let Some(variadic) = &ty.variadic {
             self.bare_variadic(variadic);
-            self.zerobreak();
+            self.scan_zero_break();
         }
         self.offset(-self.config.indent);
         self.scan_end();
@@ -120,7 +120,7 @@ impl Engine {
         self.scan_string("&");
         if let Some(lifetime) = &ty.lifetime {
             self.lifetime(lifetime);
-            self.nbsp();
+            self.scan_space();
         }
         if ty.mutability.is_some() {
             self.scan_string("mut ");
@@ -147,12 +147,12 @@ impl Engine {
     fn type_tuple(&mut self, ty: &TypeTuple) {
         self.scan_string("(");
         self.scan_begin_vertical(self.config.indent);
-        self.zerobreak();
+        self.scan_zero_break();
         for elem in ty.elems.iter().delimited() {
             self.ty(&elem);
             if ty.elems.len() == 1 {
                 self.scan_string(",");
-                self.zerobreak();
+                self.scan_zero_break();
             } else {
                 self.trailing_comma(elem.is_last);
             }
@@ -199,7 +199,7 @@ impl Engine {
         self.scan_string("extern ");
         if let Some(name) = &abi.name {
             self.lit_str(name);
-            self.nbsp();
+            self.scan_space();
         }
     }
 }

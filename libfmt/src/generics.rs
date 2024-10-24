@@ -17,7 +17,7 @@ impl Engine {
 
         self.scan_string("<");
         self.scan_begin_vertical(0);
-        self.zerobreak();
+        self.scan_zero_break();
 
         // Print lifetimes before types and consts, regardless of their
         // order in self.params.
@@ -87,13 +87,13 @@ impl Engine {
             if type_param_bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.scan_space();
+                self.scan_space_break();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
         }
         if let Some(default) = &type_param.default {
-            self.scan_space();
+            self.scan_space_break();
             self.scan_string("= ");
             self.ty(default);
         }
@@ -290,33 +290,33 @@ impl Engine {
                 if semi {
                     self.scan_string(";");
                 } else {
-                    self.nbsp();
+                    self.scan_space();
                 }
                 return;
             }
         };
         if hardbreaks {
-            self.scan_hardbreak();
+            self.scan_newline_break();
             self.offset(-self.config.indent);
             self.scan_string("where");
-            self.scan_hardbreak();
+            self.scan_newline_break();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
                     self.scan_string(";");
                 } else {
                     self.scan_string(",");
-                    self.scan_hardbreak();
+                    self.scan_newline_break();
                 }
             }
             if !semi {
                 self.offset(-self.config.indent);
             }
         } else {
-            self.scan_space();
+            self.scan_space_break();
             self.offset(-self.config.indent);
             self.scan_string("where");
-            self.scan_space();
+            self.scan_space_break();
             for predicate in where_clause.predicates.iter().delimited() {
                 self.where_predicate(&predicate);
                 if predicate.is_last && semi {
@@ -353,9 +353,9 @@ impl Engine {
         }
         for type_param_bound in predicate.bounds.iter().delimited() {
             if type_param_bound.is_first {
-                self.nbsp();
-            } else {
                 self.scan_space();
+            } else {
+                self.scan_space_break();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&type_param_bound);
@@ -369,9 +369,9 @@ impl Engine {
         self.scan_begin_horizontal(self.config.indent);
         for lifetime in predicate.bounds.iter().delimited() {
             if lifetime.is_first {
-                self.nbsp();
-            } else {
                 self.scan_space();
+            } else {
+                self.scan_space_break();
                 self.scan_string("+ ");
             }
             self.lifetime(&lifetime);

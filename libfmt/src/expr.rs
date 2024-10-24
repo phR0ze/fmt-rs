@@ -105,9 +105,9 @@ impl Engine {
             self.scan_string(")");
         }
         if needs_newline_if_wrap(expr) {
-            self.scan_space();
+            self.scan_space_break();
         } else {
-            self.nbsp();
+            self.scan_space();
         }
         self.scan_end();
     }
@@ -116,7 +116,7 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("[");
         self.scan_begin_vertical(self.config.indent);
-        self.zerobreak();
+        self.scan_zero_break();
         for element in expr.elems.iter().delimited() {
             self.expr(&element);
             self.trailing_comma(element.is_last);
@@ -131,7 +131,7 @@ impl Engine {
         self.scan_begin_horizontal(0);
         self.expr(&expr.left);
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         self.expr(&expr.right);
         self.scan_end();
     }
@@ -166,9 +166,9 @@ impl Engine {
         self.scan_begin_horizontal(-self.config.indent);
         self.expr(&expr.left);
         self.scan_end();
-        self.scan_space();
+        self.scan_space_break();
         self.binary_operator(&expr.op);
-        self.nbsp();
+        self.scan_space();
         self.expr(&expr.right);
         self.scan_end();
     }
@@ -187,11 +187,11 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("break");
         if let Some(lifetime) = &expr.label {
-            self.nbsp();
+            self.scan_space();
             self.lifetime(lifetime);
         }
         if let Some(value) = &expr.expr {
-            self.nbsp();
+            self.scan_space();
             self.expr(value);
         }
     }
@@ -218,7 +218,7 @@ impl Engine {
         self.scan_begin_horizontal(-self.config.indent);
         self.expr(&expr.expr);
         self.scan_end();
-        self.scan_space();
+        self.scan_space_break();
         self.scan_string("as ");
         self.ty(&expr.ty);
         self.scan_end();
@@ -246,21 +246,21 @@ impl Engine {
         self.scan_string("|");
         for pat in expr.inputs.iter().delimited() {
             if pat.is_first {
-                self.zerobreak();
+                self.scan_zero_break();
             }
             self.pat(&pat);
             if !pat.is_last {
                 self.scan_string(",");
-                self.scan_space();
+                self.scan_space_break();
             }
         }
         match &expr.output {
             ReturnType::Default => {
                 self.scan_string("|");
-                self.scan_space();
+                self.scan_space_break();
                 self.offset(-self.config.indent);
                 self.scan_end();
-                self.neverbreak();
+                self.scan_never_break();
                 let wrap_in_brace = match &*expr.body {
                     Expr::Match(ExprMatch { attrs, .. }) | Expr::Call(ExprCall { attrs, .. }) => {
                         attrs::has_outer(attrs)
@@ -295,8 +295,8 @@ impl Engine {
                 self.scan_end();
                 self.scan_string(" -> ");
                 self.ty(ty);
-                self.nbsp();
-                self.neverbreak();
+                self.scan_space();
+                self.scan_never_break();
                 self.expr(&expr.body);
             }
         }
@@ -315,7 +315,7 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("continue");
         if let Some(lifetime) = &expr.label {
-            self.nbsp();
+            self.scan_space();
             self.lifetime(lifetime);
         }
     }
@@ -343,12 +343,12 @@ impl Engine {
         self.scan_string("for ");
         self.pat(&expr.pat);
         self.scan_string(" in ");
-        self.neverbreak();
+        self.scan_never_break();
         self.wrap_exterior_struct(&expr.expr);
         self.scan_string("{");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_vertical(self.config.indent);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
@@ -395,11 +395,11 @@ impl Engine {
                     // clause, wrap in a block.
                     other => {
                         self.scan_string("{");
-                        self.scan_space();
+                        self.scan_space_break();
                         self.scan_begin_horizontal(self.config.indent);
                         self.expr(other);
                         self.scan_end();
-                        self.scan_space();
+                        self.scan_space_break();
                         self.offset(-self.config.indent);
                         self.scan_string("}");
                     }
@@ -410,7 +410,7 @@ impl Engine {
             self.scan_string("{}");
         } else {
             self.scan_string("{");
-            self.scan_hardbreak();
+            self.scan_newline_break();
             for stmt in &expr.then_branch.stmts {
                 self.stmt(stmt);
             }
@@ -448,7 +448,7 @@ impl Engine {
         self.pat(&expr.pat);
         self.scan_end();
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_horizontal(0);
         let needs_paren = contains_exterior_struct_lit(&expr.expr);
         if needs_paren {
@@ -474,7 +474,7 @@ impl Engine {
         }
         self.scan_string("loop {");
         self.scan_begin_vertical(self.config.indent);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
@@ -496,13 +496,13 @@ impl Engine {
         self.scan_string("match ");
         self.wrap_exterior_struct(&expr.expr);
         self.scan_string("{");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_vertical(self.config.indent);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for arm in &expr.arms {
             self.arm(arm);
-            self.scan_hardbreak();
+            self.scan_newline_break();
         }
         self.offset(-self.config.indent);
         self.scan_end();
@@ -590,7 +590,7 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("return");
         if let Some(value) = &expr.expr {
-            self.nbsp();
+            self.scan_space();
             self.expr(value);
         }
     }
@@ -602,7 +602,7 @@ impl Engine {
         self.qpath(&expr.qself, &expr.path, PathKind::Expr);
         self.scan_end();
         self.scan_string(" {");
-        self.space_if_nonempty();
+        self.scan_space_break_if_nonempty();
         for field_value in expr.fields.iter().delimited() {
             self.field_value(&field_value);
             self.trailing_comma_or_space(field_value.is_last && expr.rest.is_none());
@@ -610,7 +610,7 @@ impl Engine {
         if let Some(rest) = &expr.rest {
             self.scan_string("..");
             self.expr(rest);
-            self.scan_space();
+            self.scan_space_break();
         }
         self.offset(-self.config.indent);
         self.end_with_max_width(34);
@@ -640,12 +640,12 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("(");
         self.scan_begin_vertical(self.config.indent);
-        self.zerobreak();
+        self.scan_zero_break();
         for elem in expr.elems.iter().delimited() {
             self.expr(&elem);
             if expr.elems.len() == 1 {
                 self.scan_string(",");
-                self.zerobreak();
+                self.scan_zero_break();
             } else {
                 self.trailing_comma(elem.is_last);
             }
@@ -684,9 +684,9 @@ impl Engine {
         self.scan_string("while ");
         self.wrap_exterior_struct(&expr.cond);
         self.scan_string("{");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_vertical(self.config.indent);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&expr.attrs);
         for stmt in &expr.body.stmts {
             self.stmt(stmt);
@@ -700,7 +700,7 @@ impl Engine {
         self.outer_attrs(&expr.attrs);
         self.scan_string("yield");
         if let Some(value) = &expr.expr {
-            self.nbsp();
+            self.scan_space();
             self.expr(value);
         }
     }
@@ -756,14 +756,14 @@ impl Engine {
             }
         }
         if let Expr::Block(body) = body {
-            self.nbsp();
+            self.scan_space();
             if let Some(label) = &body.label {
                 self.label(label);
             }
             self.scan_string("{");
-            self.neverbreak();
+            self.scan_never_break();
             self.scan_begin_vertical(self.config.indent);
-            self.hardbreak_if_nonempty();
+            self.scan_newline_break_if_nonempty();
             self.inner_attrs(&body.attrs);
             for stmt in &body.block.stmts {
                 self.stmt(stmt);
@@ -773,8 +773,8 @@ impl Engine {
             self.scan_string("}");
             self.scan_end();
         } else {
-            self.nbsp();
-            self.neverbreak();
+            self.scan_space();
+            self.scan_never_break();
             self.scan_begin_vertical(self.config.indent);
             self.scan_break(BreakToken {
                 pre_break: Some('{'),
@@ -801,7 +801,7 @@ impl Engine {
             }
             _ => {
                 self.scan_begin_vertical(self.config.indent);
-                self.zerobreak();
+                self.scan_zero_break();
                 for arg in args.iter().delimited() {
                     self.expr(&arg);
                     self.trailing_comma(arg.is_last);
@@ -815,14 +815,14 @@ impl Engine {
     pub fn small_block(&mut self, block: &Block, attrs: &[Attribute]) {
         self.scan_string("{");
         if attrs::has_inner(attrs) || !block.stmts.is_empty() {
-            self.scan_space();
+            self.scan_space_break();
             self.inner_attrs(attrs);
             match block.stmts.as_slice() {
                 [Stmt::Expr(expr, None)] if stmt::break_after(expr) => {
                     self.scan_begin_horizontal(0);
                     self.expr_beginning_of_line(expr, true);
                     self.scan_end();
-                    self.scan_space();
+                    self.scan_space_break();
                 }
                 _ => {
                     for stmt in &block.stmts {
@@ -899,7 +899,7 @@ impl Engine {
         if beginning_of_line && self.is_short_ident(expr) {
             return;
         }
-        self.zerobreak();
+        self.scan_zero_break();
     }
 
     fn is_short_ident(&self, expr: &Expr) -> bool {

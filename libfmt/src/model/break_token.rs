@@ -4,7 +4,8 @@ pub(crate) struct BreakToken {
     /// ?
     pub offset: isize,
 
-    /// ?
+    /// Use this many spaces for this break when printing out the final code.
+    /// * SIZE_INFINITY is used to indicate that the break should be a newline instead
     pub blank_space: usize,
 
     /// ?
@@ -24,10 +25,18 @@ pub(crate) struct BreakToken {
 }
 
 impl BreakToken {
-    /// Create a new neverbreak BreakToken
-    pub fn neverbreak() -> Self {
+    /// Create a new BreakToken with the neverbreak flag set
+    pub fn never_break() -> Self {
         Self {
             never_break: true,
+            ..BreakToken::default()
+        }
+    }
+
+    /// Create a new BreakToken with the blank_space property set to n
+    pub fn space_break(n: usize) -> Self {
+        Self {
+            blank_space: n,
             ..BreakToken::default()
         }
     }

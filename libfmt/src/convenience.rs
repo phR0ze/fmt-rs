@@ -18,32 +18,43 @@ impl Engine {
         });
     }
 
-    fn scan_spaces(&mut self, n: usize) {
-        self.scan_break(BreakToken {
-            blank_space: n,
-            ..BreakToken::default()
-        });
-    }
-
-    pub fn zerobreak(&mut self) {
-        self.scan_spaces(0);
-    }
-
-    pub fn scan_space(&mut self) {
-        self.scan_spaces(1);
-    }
-
     /// Add a single space to the buffer
-    pub fn nbsp(&mut self) {
+    pub fn scan_space(&mut self) {
         self.scan_string(" ");
     }
 
-    /// Add a single newline to the buffer
-    pub fn scan_hardbreak(&mut self) {
-        self.scan_spaces(SIZE_INFINITY as usize);
+    /// Add a break to the buffer that will use a zero spaces if the break is used
+    /// during the final printing of the code
+    pub fn scan_zero_break(&mut self) {
+        self.scan_break(BreakToken::space_break(0));
     }
 
-    pub fn space_if_nonempty(&mut self) {
+    /// Add a break to the buffer that will use a single space if the break is used
+    /// during the final printing of the code
+    pub fn scan_space_break(&mut self) {
+        self.scan_spaces_break(1);
+    }
+
+    /// Add a break to the buffer that will use the given number of spaces if the break is used
+    /// during the final printing of the code
+    pub fn scan_spaces_break(&mut self, n: usize) {
+        self.scan_break(BreakToken::space_break(n));
+    }
+
+    /// Add a BreakToken with the neverbreak flag set
+    pub fn scan_never_break(&mut self) {
+        self.scan_break(BreakToken::never_break());
+    }
+
+    /// Add a break to the buffer that will use a newline if the break is used during the final
+    /// printing of the code
+    pub fn scan_newline_break(&mut self) {
+        self.scan_spaces_break(SIZE_INFINITY as usize);
+    }
+
+    /// Add a break to the buffer that will use a single space if the break is used if the buffer is
+    /// nonempty
+    pub fn scan_space_break_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: 1,
             if_nonempty: true,
@@ -51,7 +62,9 @@ impl Engine {
         });
     }
 
-    pub fn hardbreak_if_nonempty(&mut self) {
+    /// Add a break to the buffer that will use a newline if the buffer is not empty and if the
+    /// break is used during the final printing of the code
+    pub fn scan_newline_break_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: SIZE_INFINITY as usize,
             if_nonempty: true,
@@ -67,7 +80,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.scan_space();
+            self.scan_space_break();
         }
     }
 
@@ -80,12 +93,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.scan_space();
+            self.scan_space_break();
         }
-    }
-
-    /// Create a neverbreak break token
-    pub fn neverbreak(&mut self) {
-        self.scan_break(BreakToken::neverbreak());
     }
 }

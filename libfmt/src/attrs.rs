@@ -31,7 +31,7 @@ impl Engine {
     pub(crate) fn scan_trailing_comment(&mut self, attrs: &[Attribute]) -> bool {
         for attr in attrs {
             if let Some(mut comment) = value_of_attribute("comment_line_trailing", attr) {
-                self.nbsp();
+                self.scan_space();
                 trim_trailing_spaces(&mut comment);
                 self.scan_string("//");
                 self.scan_string(comment);
@@ -59,7 +59,7 @@ impl Engine {
                     AttrStyle::Inner(_) => "//!",
                 });
                 self.scan_string(doc);
-                self.scan_hardbreak(); // Add a newline after the doc comment
+                self.scan_newline_break(); // Add a newline after the doc comment
                 return;
             } else if can_be_block_comment(&doc)
                 && match attr.style {
@@ -74,24 +74,24 @@ impl Engine {
                 });
                 self.scan_string(doc);
                 self.scan_string("*/");
-                self.scan_hardbreak();
+                self.scan_newline_break();
                 return;
             }
         } else if let Some(_) = value_of_attribute("comment_empty", attr) {
-            self.scan_hardbreak();
+            self.scan_newline_break();
             return;
         } else if let Some(mut comment) = value_of_attribute("comment_line", attr) {
             trim_trailing_spaces(&mut comment);
             self.scan_string("//");
             self.scan_string(comment);
-            self.scan_hardbreak();
+            self.scan_newline_break();
             return;
         } else if let Some(mut comment) = value_of_attribute("comment_block", attr) {
             trim_interior_trailing_spaces(&mut comment);
             self.scan_string("/*");
             self.scan_string(comment);
             self.scan_string("*/");
-            self.scan_hardbreak();
+            self.scan_newline_break();
             return;
         }
 
@@ -102,7 +102,7 @@ impl Engine {
         self.scan_string("[");
         self.meta(&attr.meta);
         self.scan_string("]");
-        self.scan_space();
+        self.scan_space_break();
     }
 
     fn meta(&mut self, meta: &Meta) {
@@ -133,7 +133,7 @@ impl Engine {
     fn attr_tokens(&mut self, tokens: TokenStream) {
         let mut stack = Vec::new();
         stack.push((tokens.into_iter().peekable(), Delimiter::None));
-        let mut space = Self::nbsp as fn(&mut Self);
+        let mut space = Self::scan_space as fn(&mut Self);
 
         #[derive(PartialEq)]
         enum State {
@@ -157,7 +157,7 @@ impl Engine {
                 Some(TokenTree::Punct(punct)) => {
                     let ch = punct.as_char();
                     if let (Word, '=') = (state, ch) {
-                        self.nbsp();
+                        self.scan_space();
                     }
                     if ch == ',' && tokens.peek().is_none() {
                         self.trailing_comma(true);
@@ -165,7 +165,7 @@ impl Engine {
                     } else {
                         self.token_punct(ch);
                         if ch == '=' {
-                            self.nbsp();
+                            self.scan_space();
                         } else if ch == ',' {
                             space(self);
                         }
@@ -186,7 +186,7 @@ impl Engine {
                         Delimiter::Parenthesis => {
                             self.scan_string("(");
                             self.scan_begin_vertical(self.config.indent);
-                            self.zerobreak();
+                            self.scan_zero_break();
                             state = Punct;
                         }
                         Delimiter::Brace => {
@@ -200,13 +200,13 @@ impl Engine {
                         Delimiter::None => {}
                     }
                     stack.push((stream.into_iter().peekable(), delimiter));
-                    space = Self::scan_space;
+                    space = Self::scan_space_break;
                 }
                 None => {
                     match delimiter {
                         Delimiter::Parenthesis => {
                             if state != TrailingComma {
-                                self.zerobreak();
+                                self.scan_zero_break();
                             }
                             self.offset(-self.config.indent);
                             self.scan_end();
@@ -225,7 +225,7 @@ impl Engine {
                     }
                     stack.pop();
                     if stack.is_empty() {
-                        space = Self::nbsp;
+                        space = Self::scan_space;
                     }
                 }
             }

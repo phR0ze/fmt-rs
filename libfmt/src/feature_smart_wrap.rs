@@ -21,9 +21,9 @@ impl Engine {
 
     /// Smart wrapper for zerobreak. In some of the original cases a zero break was used.
     /// * Features C0002: Smart wrapping
-    pub fn smart_wrap_zerobreak(&mut self) {
+    pub fn smart_wrap_break_spaces(&mut self) {
         if !self.config.smart_wrapping() {
-            self.zerobreak();
+            self.scan_zero_break();
         }
     }
 

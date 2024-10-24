@@ -11,24 +11,24 @@ impl Engine {
                 self.pat(&local.pat);
                 if let Some(local_init) = &local.init {
                     self.scan_string(" = ");
-                    self.neverbreak();
+                    self.scan_never_break();
                     self.expr(&local_init.expr);
                     if let Some((_else, diverge)) = &local_init.diverge {
-                        self.scan_space();
+                        self.scan_space_break();
                         self.scan_string("else ");
                         self.scan_end();
-                        self.neverbreak();
+                        self.scan_never_break();
                         if let Expr::Block(expr) = diverge.as_ref() {
                             self.scan_begin_vertical(self.config.indent);
                             self.small_block(&expr.block, &[]);
                             self.scan_end();
                         } else {
                             self.scan_string("{");
-                            self.scan_space();
+                            self.scan_space_break();
                             self.scan_begin_horizontal(self.config.indent);
                             self.expr(diverge);
                             self.scan_end();
-                            self.scan_space();
+                            self.scan_space_break();
                             self.offset(-self.config.indent);
                             self.scan_string("}");
                         }
@@ -39,7 +39,7 @@ impl Engine {
                     self.scan_end();
                 }
                 self.scan_string(";");
-                self.scan_hardbreak();
+                self.scan_newline_break();
             }
             Stmt::Item(item) => self.item(item),
             Stmt::Expr(expr, None) => {
@@ -50,7 +50,7 @@ impl Engine {
                         self.scan_string(";");
                     }
                     self.scan_end();
-                    self.scan_hardbreak();
+                    self.scan_newline_break();
                 } else {
                     self.expr_beginning_of_line(expr, true);
                 }
@@ -67,13 +67,13 @@ impl Engine {
                     self.scan_string(";");
                 }
                 self.scan_end();
-                self.scan_hardbreak();
+                self.scan_newline_break();
             }
             Stmt::Macro(stmt) => {
                 self.outer_attrs(&stmt.attrs);
                 let semicolon = true;
                 self.scan_mac(&stmt.mac, None, semicolon);
-                self.scan_hardbreak();
+                self.scan_newline_break();
             }
         }
     }

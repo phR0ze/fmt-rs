@@ -45,12 +45,12 @@ impl Engine {
         self.scan_string(": ");
         self.ty(&item.ty);
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         self.expr(&item.expr);
         self.scan_string(";");
         self.scan_end();
         self.scan_trailing_comment(&item.attrs);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_enum(&mut self, item: &ItemEnum) {
@@ -63,17 +63,17 @@ impl Engine {
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
         self.scan_trailing_comment(&item.attrs);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         for variant in &item.variants {
             self.variant(variant);
             self.scan_string(",");
             self.scan_trailing_comment(&variant.attrs);
-            self.scan_hardbreak();
+            self.scan_newline_break();
         }
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_extern_crate(&mut self, item: &ItemExternCrate) {
@@ -86,7 +86,7 @@ impl Engine {
             self.ident(rename);
         }
         self.scan_string(";");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_fn(&mut self, item: &ItemFn) {
@@ -103,7 +103,7 @@ impl Engine {
         self.where_clause_for_body(&item.sig.generics.where_clause);
         self.scan_string("{");
         self.scan_trailing_comment(&item.attrs);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&item.attrs);
         for stmt in &item.block.stmts {
             self.stmt(stmt);
@@ -111,7 +111,7 @@ impl Engine {
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_foreign_mod(&mut self, item: &ItemForeignMod) {
@@ -122,7 +122,7 @@ impl Engine {
         }
         self.abi(&item.abi);
         self.scan_string("{");
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&item.attrs);
         for foreign_item in &item.items {
             self.foreign_item(foreign_item);
@@ -130,7 +130,7 @@ impl Engine {
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_impl(&mut self, item: &ItemImpl) {
@@ -147,13 +147,13 @@ impl Engine {
         self.scan_string("impl");
         self.generics(&item.generics);
         self.scan_end();
-        self.nbsp();
+        self.scan_space();
         if let Some((negative_polarity, path, _for_token)) = &item.trait_ {
             if negative_polarity.is_some() {
                 self.scan_string("!");
             }
             self.scan_path(path, PathKind::Type);
-            self.scan_space();
+            self.scan_space_break();
             self.scan_string("for ");
         }
         self.ty(&item.self_ty);
@@ -161,7 +161,7 @@ impl Engine {
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
         self.scan_trailing_comment(&item.attrs);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&item.attrs);
         for impl_item in &item.items {
             self.impl_item(impl_item);
@@ -169,7 +169,7 @@ impl Engine {
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_macro(&mut self, item: &ItemMacro) {
@@ -177,7 +177,7 @@ impl Engine {
         let semicolon = true;
         self.scan_mac(&item.mac, item.ident.as_ref(), semicolon);
         self.scan_trailing_comment(&item.attrs);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_mod(&mut self, item: &ItemMod) {
@@ -192,7 +192,7 @@ impl Engine {
         if let Some((_brace, items)) = &item.content {
             self.scan_string(" {");
             self.scan_trailing_comment(&item.attrs);
-            self.hardbreak_if_nonempty();
+            self.scan_newline_break_if_nonempty();
             self.inner_attrs(&item.attrs);
             for item in items {
                 self.item(item);
@@ -205,7 +205,7 @@ impl Engine {
             self.scan_trailing_comment(&item.attrs);
             self.scan_end();
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_static(&mut self, item: &ItemStatic) {
@@ -224,14 +224,14 @@ impl Engine {
         //     blank_space: 1,
         //     ..BreakToken::default()
         // });
-        self.neverbreak();
+        self.scan_never_break();
         //self.zerobreak();
 
         self.expr(&item.expr);
         self.scan_string(";");
         self.scan_end();
         self.scan_trailing_comment(&item.attrs);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_struct(&mut self, item: &ItemStruct) {
@@ -247,13 +247,13 @@ impl Engine {
                 self.where_clause_for_body(&item.generics.where_clause);
                 self.scan_string("{");
                 self.scan_trailing_comment(&item.attrs);
-                self.hardbreak_if_nonempty();
+                self.scan_newline_break_if_nonempty();
 
                 for field in fields.named.iter() {
                     self.scan_field(field);
                     self.scan_string(",");
                     self.scan_trailing_comment(&field.attrs);
-                    self.scan_hardbreak();
+                    self.scan_newline_break();
                 }
 
                 self.offset(-self.config.indent);
@@ -273,7 +273,7 @@ impl Engine {
                 self.scan_trailing_comment(&item.attrs);
             }
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_trait(&mut self, item: &ItemTrait) {
@@ -300,7 +300,7 @@ impl Engine {
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
         self.scan_trailing_comment(&item.attrs);
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&item.attrs);
         for trait_item in &item.items {
             self.trait_item(trait_item);
@@ -308,7 +308,7 @@ impl Engine {
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_trait_alias(&mut self, item: &ItemTraitAlias) {
@@ -319,17 +319,17 @@ impl Engine {
         self.ident(&item.ident);
         self.generics(&item.generics);
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         for bound in item.bounds.iter().delimited() {
             if !bound.is_first {
-                self.scan_space();
+                self.scan_space_break();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);
         }
         self.where_clause_semi(&item.generics.where_clause);
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_type(&mut self, item: &ItemType) {
@@ -341,13 +341,13 @@ impl Engine {
         self.generics(&item.generics);
         self.where_clause_oneline(&item.generics.where_clause);
         self.scan_string("= ");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_horizontal(-self.config.indent);
         self.ty(&item.ty);
         self.scan_end();
         self.scan_string(";");
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_union(&mut self, item: &ItemUnion) {
@@ -359,16 +359,16 @@ impl Engine {
         self.generics(&item.generics);
         self.where_clause_for_body(&item.generics.where_clause);
         self.scan_string("{");
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         for field in &item.fields.named {
             self.scan_field(field);
             self.scan_string(",");
-            self.scan_hardbreak();
+            self.scan_newline_break();
         }
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn item_use(&mut self, item: &ItemUse) {
@@ -380,7 +380,7 @@ impl Engine {
         }
         self.use_tree(&item.tree);
         self.scan_string(";");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -388,7 +388,7 @@ impl Engine {
         if !item.is_empty() {
             unimplemented!("Item::Verbatim `{}`", item);
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn use_tree(&mut self, use_tree: &UseTree) {
@@ -435,7 +435,7 @@ impl Engine {
         } else {
             self.scan_begin_vertical(self.config.indent);
             self.scan_string("{");
-            self.zerobreak();
+            self.scan_zero_break();
             self.scan_begin_horizontal(0);
             for use_tree in use_group.items.iter().delimited() {
                 self.use_tree(&use_tree);
@@ -446,9 +446,9 @@ impl Engine {
                         use_tree = &use_path.tree;
                     }
                     if let UseTree::Group(_) = use_tree {
-                        self.scan_hardbreak();
+                        self.scan_newline_break();
                     } else {
-                        self.scan_space();
+                        self.scan_space_break();
                     }
                 }
             }
@@ -479,7 +479,7 @@ impl Engine {
         self.signature(&foreign_item.sig);
         self.where_clause_semi(&foreign_item.sig.generics.where_clause);
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn foreign_item_static(&mut self, foreign_item: &ForeignItemStatic) {
@@ -493,7 +493,7 @@ impl Engine {
         self.ty(&foreign_item.ty);
         self.scan_string(";");
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn foreign_item_type(&mut self, foreign_item: &ForeignItemType) {
@@ -505,14 +505,14 @@ impl Engine {
         self.generics(&foreign_item.generics);
         self.scan_string(";");
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn foreign_item_macro(&mut self, foreign_item: &ForeignItemMacro) {
         self.outer_attrs(&foreign_item.attrs);
         let semicolon = true;
         self.scan_mac(&foreign_item.mac, None, semicolon);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -520,7 +520,7 @@ impl Engine {
         if !foreign_item.is_empty() {
             unimplemented!("ForeignItem::Verbatim `{}`", foreign_item);
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn trait_item(&mut self, trait_item: &TraitItem) {
@@ -545,13 +545,13 @@ impl Engine {
         self.ty(&trait_item.ty);
         if let Some((_eq_token, default)) = &trait_item.default {
             self.scan_string(" = ");
-            self.neverbreak();
+            self.scan_never_break();
             self.expr(default);
         }
         self.scan_string(";");
         self.scan_end();
         self.scan_trailing_comment(&trait_item.attrs);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn trait_item_fn(&mut self, trait_item: &TraitItemFn) {
@@ -562,7 +562,7 @@ impl Engine {
             self.where_clause_for_body(&trait_item.sig.generics.where_clause);
             self.scan_string("{");
             self.scan_trailing_comment(&trait_item.attrs);
-            self.hardbreak_if_nonempty();
+            self.scan_newline_break_if_nonempty();
             self.inner_attrs(&trait_item.attrs);
             for stmt in &block.stmts {
                 self.stmt(stmt);
@@ -575,7 +575,7 @@ impl Engine {
             self.scan_end();
             self.scan_trailing_comment(&trait_item.attrs);
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn trait_item_type(&mut self, trait_item: &TraitItemType) {
@@ -588,14 +588,14 @@ impl Engine {
             if bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.scan_space();
+                self.scan_space_break();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);
         }
         if let Some((_eq_token, default)) = &trait_item.default {
             self.scan_string(" = ");
-            self.neverbreak();
+            self.scan_never_break();
             self.scan_begin_horizontal(-self.config.indent);
             self.ty(default);
             self.scan_end();
@@ -603,14 +603,14 @@ impl Engine {
         self.where_clause_oneline_semi(&trait_item.generics.where_clause);
         self.scan_end();
         self.scan_trailing_comment(&trait_item.attrs);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn trait_item_macro(&mut self, trait_item: &TraitItemMacro) {
         self.outer_attrs(&trait_item.attrs);
         let semicolon = true;
         self.scan_mac(&trait_item.mac, None, semicolon);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -618,7 +618,7 @@ impl Engine {
         if !trait_item.is_empty() {
             unimplemented!("TraitItem::Verbatim `{}`", trait_item);
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn impl_item(&mut self, impl_item: &ImplItem) {
@@ -646,11 +646,11 @@ impl Engine {
         self.scan_string(": ");
         self.ty(&impl_item.ty);
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         self.expr(&impl_item.expr);
         self.scan_string(";");
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn impl_item_fn(&mut self, impl_item: &ImplItemFn) {
@@ -666,7 +666,7 @@ impl Engine {
         // Want this on the next line if the prior line was a smart wrap
         self.scan_string("{");
 
-        self.hardbreak_if_nonempty();
+        self.scan_newline_break_if_nonempty();
         self.inner_attrs(&impl_item.attrs);
         for stmt in &impl_item.block.stmts {
             self.stmt(stmt);
@@ -674,7 +674,7 @@ impl Engine {
         self.offset(-self.config.indent);
         self.scan_end();
         self.scan_string("}");
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn impl_item_type(&mut self, impl_item: &ImplItemType) {
@@ -688,20 +688,20 @@ impl Engine {
         self.ident(&impl_item.ident);
         self.generics(&impl_item.generics);
         self.scan_string(" = ");
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_horizontal(-self.config.indent);
         self.ty(&impl_item.ty);
         self.scan_end();
         self.where_clause_oneline_semi(&impl_item.generics.where_clause);
         self.scan_end();
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn impl_item_macro(&mut self, impl_item: &ImplItemMacro) {
         self.outer_attrs(&impl_item.attrs);
         let semicolon = true;
         self.scan_mac(&impl_item.mac, None, semicolon);
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     #[cfg(not(feature = "verbatim"))]
@@ -709,7 +709,7 @@ impl Engine {
         if !impl_item.is_empty() {
             unimplemented!("ImplItem::Verbatim `{}`", impl_item);
         }
-        self.scan_hardbreak();
+        self.scan_newline_break();
     }
 
     fn signature(&mut self, signature: &Signature) {
@@ -731,11 +731,11 @@ impl Engine {
         self.scan_string("(");
 
         // Signature params
-        self.neverbreak();
+        self.scan_never_break();
         self.scan_begin_horizontal(0);
         // self.smart_wrap_body_begin();
         //self.smart_wrap_zerobreak();
-        self.zerobreak();
+        self.scan_zero_break();
         for input in signature.inputs.iter().delimited() {
             self.fn_arg(&input);
             let is_last = input.is_last && signature.variadic.is_none();
@@ -744,7 +744,7 @@ impl Engine {
         if let Some(variadic) = &signature.variadic {
             self.variadic(variadic);
             //self.smart_wrap_zerobreak();
-            self.zerobreak();
+            self.scan_zero_break();
         }
         self.offset(-self.config.indent);
         //self.smart_wrap_body_end();
@@ -769,7 +769,7 @@ impl Engine {
             self.scan_string("&");
             if let Some(lifetime) = lifetime {
                 self.lifetime(lifetime);
-                self.nbsp();
+                self.scan_space();
             }
         }
         if receiver.mutability.is_some() {
