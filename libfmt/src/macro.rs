@@ -32,9 +32,9 @@ impl Engine {
 
         // Compute open, close delimiters and break function
         let (open_delimiter, close_delimiter, delimiter_break) = match mac.delimiter {
-            MacroDelimiter::Paren(_) => ("(", ")", Self::scan_zero_break as fn(&mut Self)),
-            MacroDelimiter::Brace(_) => (" {", "}", Self::scan_newline_break as fn(&mut Self)),
-            MacroDelimiter::Bracket(_) => ("[", "]", Self::scan_zero_break as fn(&mut Self)),
+            MacroDelimiter::Paren(_) => ("(", ")", Self::scan_break_zero as fn(&mut Self)),
+            MacroDelimiter::Brace(_) => (" {", "}", Self::scan_break_newline as fn(&mut Self)),
+            MacroDelimiter::Bracket(_) => ("[", "]", Self::scan_break_zero as fn(&mut Self)),
         };
 
         // Scan the open delimiter
@@ -83,7 +83,7 @@ impl Engine {
         self.ident(name);
         self.scan_string(" {");
         self.scan_begin_vertical(self.config.indent);
-        self.scan_newline_break_if_nonempty();
+        self.scan_break_newline_if_nonempty();
         let mut state = State::Start;
         for tt in rules.clone() {
             let token = Token::from(tt);
@@ -92,11 +92,11 @@ impl Engine {
                     self.delimiter_open(delimiter);
                     if !stream.is_empty() {
                         self.scan_begin_vertical(self.config.indent);
-                        self.scan_zero_break();
+                        self.scan_break_zero();
                         self.scan_begin_horizontal(0);
                         self.macro_rules_tokens(stream, true);
                         self.scan_end();
-                        self.scan_zero_break();
+                        self.scan_break_zero();
                         self.offset(-self.config.indent);
                         self.scan_end();
                     }
@@ -113,14 +113,14 @@ impl Engine {
                 }
                 (Greater, Token::Group(_delimiter, stream)) => {
                     self.scan_string(" {");
-                    self.scan_never_break();
+                    self.scan_break_never();
                     if !stream.is_empty() {
                         self.scan_begin_vertical(self.config.indent);
-                        self.scan_newline_break();
+                        self.scan_break_newline();
                         self.scan_begin_horizontal(0);
                         self.macro_rules_tokens(stream, false);
                         self.scan_end();
-                        self.scan_newline_break();
+                        self.scan_break_newline();
                         self.offset(-self.config.indent);
                         self.scan_end();
                     }
@@ -129,7 +129,7 @@ impl Engine {
                 }
                 (Expander, Token::Punct(';', Spacing::Alone)) => {
                     self.scan_string(";");
-                    self.scan_newline_break();
+                    self.scan_break_newline();
                     state = Start;
                 }
                 _ => unimplemented!("bad macro_rules syntax"),
@@ -139,9 +139,9 @@ impl Engine {
             Start => {}
             Expander => {
                 self.scan_string(";");
-                self.scan_newline_break();
+                self.scan_break_newline();
             }
-            _ => self.scan_newline_break(),
+            _ => self.scan_break_newline(),
         }
         self.offset(-self.config.indent);
         self.scan_end();
@@ -210,9 +210,9 @@ impl Engine {
 
             if !previous_is_joint {
                 if needs_space {
-                    self.scan_space_break();
+                    self.scan_break_space();
                 } else if let Token::Punct('.', _) = token {
-                    self.scan_zero_break();
+                    self.scan_break_zero();
                 }
             }
             previous_is_joint = match token {

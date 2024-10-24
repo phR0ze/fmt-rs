@@ -66,7 +66,7 @@ impl Engine {
         }
         for case in pat.cases.iter().delimited() {
             if !case.is_first {
-                self.scan_space_break();
+                self.scan_break_space();
                 self.scan_string("| ");
             }
             self.pat(&case);
@@ -110,14 +110,14 @@ impl Engine {
         self.scan_begin_vertical(self.config.indent);
         self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string(" {");
-        self.scan_space_break_if_nonempty();
+        self.scan_break_space_if_nonempty();
         for field in pat.fields.iter().delimited() {
             self.field_pat(&field);
             self.trailing_comma_or_space(field.is_last && pat.rest.is_none());
         }
         if let Some(rest) = &pat.rest {
             self.pat_rest(rest);
-            self.scan_space_break();
+            self.scan_break_space();
         }
         self.offset(-self.config.indent);
         self.scan_end();
@@ -128,14 +128,14 @@ impl Engine {
         self.outer_attrs(&pat.attrs);
         self.scan_string("(");
         self.scan_begin_vertical(self.config.indent);
-        self.scan_zero_break();
+        self.scan_break_zero();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             if pat.elems.len() == 1 {
                 if pat.elems.trailing_punct() {
                     self.scan_string(",");
                 }
-                self.scan_zero_break();
+                self.scan_break_zero();
             } else {
                 self.trailing_comma(elem.is_last);
             }
@@ -150,7 +150,7 @@ impl Engine {
         self.scan_path(&pat.path, PathKind::Expr);
         self.scan_string("(");
         self.scan_begin_vertical(self.config.indent);
-        self.scan_zero_break();
+        self.scan_break_zero();
         for elem in pat.elems.iter().delimited() {
             self.pat(&elem);
             self.trailing_comma(elem.is_last);

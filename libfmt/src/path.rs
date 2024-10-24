@@ -85,7 +85,7 @@ impl Engine {
         }
         self.scan_string("<");
         self.scan_begin_vertical(self.config.indent);
-        self.scan_zero_break();
+        self.scan_break_zero();
 
         // Print lifetimes before types/consts/bindings, regardless of their
         // order in self.args.
@@ -149,7 +149,7 @@ impl Engine {
             if bound.is_first {
                 self.scan_string(": ");
             } else {
-                self.scan_space_break();
+                self.scan_break_space();
                 self.scan_string("+ ");
             }
             self.type_param_bound(&bound);
@@ -160,7 +160,7 @@ impl Engine {
     fn parenthesized_generic_arguments(&mut self, arguments: &ParenthesizedGenericArguments) {
         self.scan_begin_vertical(self.config.indent);
         self.scan_string("(");
-        self.scan_zero_break();
+        self.scan_break_zero();
         for ty in arguments.inputs.iter().delimited() {
             self.ty(&ty);
             self.trailing_comma(ty.is_last);

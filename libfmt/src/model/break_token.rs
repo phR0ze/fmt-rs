@@ -26,7 +26,7 @@ pub(crate) struct BreakToken {
 
 impl BreakToken {
     /// Create a new BreakToken with the neverbreak flag set
-    pub fn never_break() -> Self {
+    pub fn never() -> Self {
         Self {
             never_break: true,
             ..BreakToken::default()
@@ -34,7 +34,7 @@ impl BreakToken {
     }
 
     /// Create a new BreakToken with the blank_space property set to n
-    pub fn space_break(n: usize) -> Self {
+    pub fn space(n: usize) -> Self {
         Self {
             blank_space: n,
             ..BreakToken::default()

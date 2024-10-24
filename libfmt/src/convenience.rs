@@ -25,36 +25,36 @@ impl Engine {
 
     /// Add a break to the buffer that will use a zero spaces if the break is used
     /// during the final printing of the code
-    pub fn scan_zero_break(&mut self) {
-        self.scan_break(BreakToken::space_break(0));
+    pub fn scan_break_zero(&mut self) {
+        self.scan_break(BreakToken::space(0));
     }
 
     /// Add a break to the buffer that will use a single space if the break is used
     /// during the final printing of the code
-    pub fn scan_space_break(&mut self) {
-        self.scan_spaces_break(1);
+    pub fn scan_break_space(&mut self) {
+        self.scan_break_spaces(1);
     }
 
     /// Add a break to the buffer that will use the given number of spaces if the break is used
     /// during the final printing of the code
-    pub fn scan_spaces_break(&mut self, n: usize) {
-        self.scan_break(BreakToken::space_break(n));
+    pub fn scan_break_spaces(&mut self, n: usize) {
+        self.scan_break(BreakToken::space(n));
     }
 
     /// Add a BreakToken with the neverbreak flag set
-    pub fn scan_never_break(&mut self) {
-        self.scan_break(BreakToken::never_break());
+    pub fn scan_break_never(&mut self) {
+        self.scan_break(BreakToken::never());
     }
 
     /// Add a break to the buffer that will use a newline if the break is used during the final
     /// printing of the code
-    pub fn scan_newline_break(&mut self) {
-        self.scan_spaces_break(SIZE_INFINITY as usize);
+    pub fn scan_break_newline(&mut self) {
+        self.scan_break_spaces(SIZE_INFINITY as usize);
     }
 
     /// Add a break to the buffer that will use a single space if the break is used if the buffer is
     /// nonempty
-    pub fn scan_space_break_if_nonempty(&mut self) {
+    pub fn scan_break_space_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: 1,
             if_nonempty: true,
@@ -64,7 +64,7 @@ impl Engine {
 
     /// Add a break to the buffer that will use a newline if the buffer is not empty and if the
     /// break is used during the final printing of the code
-    pub fn scan_newline_break_if_nonempty(&mut self) {
+    pub fn scan_break_newline_if_nonempty(&mut self) {
         self.scan_break(BreakToken {
             blank_space: SIZE_INFINITY as usize,
             if_nonempty: true,
@@ -80,7 +80,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.scan_space_break();
+            self.scan_break_space();
         }
     }
 
@@ -93,7 +93,7 @@ impl Engine {
             });
         } else {
             self.scan_string(",");
-            self.scan_space_break();
+            self.scan_break_space();
         }
     }
 }

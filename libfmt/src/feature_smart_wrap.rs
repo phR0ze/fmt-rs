@@ -23,7 +23,7 @@ impl Engine {
     /// * Features C0002: Smart wrapping
     pub fn smart_wrap_break_spaces(&mut self) {
         if !self.config.smart_wrapping() {
-            self.scan_zero_break();
+            self.scan_break_zero();
         }
     }
 

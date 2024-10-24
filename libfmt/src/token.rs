@@ -20,11 +20,11 @@ impl Engine {
         self.delimiter_open(delimiter);
         if !stream.is_empty() {
             if delimiter == Delimiter::Brace {
-                self.scan_space_break();
+                self.scan_break_space();
             }
             group_contents(self, stream);
             if delimiter == Delimiter::Brace {
-                self.scan_space_break();
+                self.scan_break_space();
             }
         }
         self.delimiter_close(delimiter);

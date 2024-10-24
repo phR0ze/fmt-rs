@@ -59,7 +59,7 @@ impl Engine {
                     AttrStyle::Inner(_) => "//!",
                 });
                 self.scan_string(doc);
-                self.scan_newline_break(); // Add a newline after the doc comment
+                self.scan_break_newline(); // Add a newline after the doc comment
                 return;
             } else if can_be_block_comment(&doc)
                 && match attr.style {
@@ -74,24 +74,24 @@ impl Engine {
                 });
                 self.scan_string(doc);
                 self.scan_string("*/");
-                self.scan_newline_break();
+                self.scan_break_newline();
                 return;
             }
         } else if let Some(_) = value_of_attribute("comment_empty", attr) {
-            self.scan_newline_break();
+            self.scan_break_newline();
             return;
         } else if let Some(mut comment) = value_of_attribute("comment_line", attr) {
             trim_trailing_spaces(&mut comment);
             self.scan_string("//");
             self.scan_string(comment);
-            self.scan_newline_break();
+            self.scan_break_newline();
             return;
         } else if let Some(mut comment) = value_of_attribute("comment_block", attr) {
             trim_interior_trailing_spaces(&mut comment);
             self.scan_string("/*");
             self.scan_string(comment);
             self.scan_string("*/");
-            self.scan_newline_break();
+            self.scan_break_newline();
             return;
         }
 
@@ -102,7 +102,7 @@ impl Engine {
         self.scan_string("[");
         self.meta(&attr.meta);
         self.scan_string("]");
-        self.scan_space_break();
+        self.scan_break_space();
     }
 
     fn meta(&mut self, meta: &Meta) {
@@ -186,7 +186,7 @@ impl Engine {
                         Delimiter::Parenthesis => {
                             self.scan_string("(");
                             self.scan_begin_vertical(self.config.indent);
-                            self.scan_zero_break();
+                            self.scan_break_zero();
                             state = Punct;
                         }
                         Delimiter::Brace => {
@@ -200,13 +200,13 @@ impl Engine {
                         Delimiter::None => {}
                     }
                     stack.push((stream.into_iter().peekable(), delimiter));
-                    space = Self::scan_space_break;
+                    space = Self::scan_break_space;
                 }
                 None => {
                     match delimiter {
                         Delimiter::Parenthesis => {
                             if state != TrailingComma {
-                                self.scan_zero_break();
+                                self.scan_break_zero();
                             }
                             self.offset(-self.config.indent);
                             self.scan_end();
