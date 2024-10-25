@@ -1,5 +1,50 @@
 # libfmt
 
+### Quick links
+* [Features](#features)
+  * [F0001: Developer comments](#f0001-developer-comments)
+  * [F0000: Skip trailing comma](#f0000-skip-trailing-comma)
+
+## Features
+
+### F0001: Developer comments
+Initial support for basic developer comments
+
+* Empty line comments
+  ```rust
+  println!("{}", "1");
+
+  println!("{}", "2");
+  ```
+
+* Block comments
+  ```rust
+  /**
+   * This is a block comment
+   */
+  println!("{}", "1");
+  ```
+
+* Line comments
+  ```rust
+  // This is a line comment
+  println!("{}", "1");
+  ```
+
+* Trailing line comments
+  ```rust
+  println!("{}", "1"); // This is a trailing comment
+  ```
+
+### F0000: Skip trailing comma
+```rust
+// rustfmt leaves a trailing comma after parameter lists
+println!("{}", "1",);
+
+// libfmt removes the trailing comma 
+println!("{}", "1");
+```
+
 ## Current
 * [ ] F0002: Smart wrapping
   * [ ] Wrap at the maximum line length using standard indent on next line
@@ -18,35 +63,5 @@
 ## Completed
 Each completed task has an associated issue number used for tracking changes to the code.
 
-* [x] **F0001**: Initial support for comments
-  * Support empty line comments
-    ```rust
-    println!("{}", "1");
-
-    println!("{}", "2");
-    ```
-  * Support block comments
-    ```rust
-    /**
-     * This is a block comment
-     */
-    println!("{}", "1");
-    ```
-  * Support line comments
-    ```rust
-    // This is a line comment
-    println!("{}", "1");
-    ```
-  * Support trailing line comments
-    ```rust
-    println!("{}", "1"); // This is a trailing comment
-    ```
-
-* [x] F0000: Skip trailing comma
-  ```rust
-  // rustfmt leaves a trailing comma after parameter lists
-  println!("{}", "1",);
-
-  // libfmt removes the trailing comma 
-  println!("{}", "1");
-  ```
+* [x] **F0001**: Developer comments
+* [x] **F0000**: Skip trailing comma
