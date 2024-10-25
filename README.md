@@ -42,7 +42,6 @@ other solution available. I align more closely with the latter.
 
 **References**
 * [Key Rust devs are disgruntled with rustfmt](https://users.rust-lang.org/t/what-do-you-think-about-gofmt-vs-rustfmt/51605)
-* [Rust formatter - Gene Michaels](https://github.com/andrewbaxter/genemichaels)
 
 ### Nightly
 Originally I thought, well I'll just modify Rustfmt to suit my needs. However I quickly found out 
