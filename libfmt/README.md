@@ -46,9 +46,9 @@ println!("{}", "1");
 ```
 
 ## Current
+* [ ] F0003: References get a space after them when used as function params
 * [ ] F0002: Smart wrapping
-  * [ ] Wrap at the maximum line length using standard indent on next line
-  * [ ] Function declarations should bump open brace to next line if params are wrapped
+  * [ ] Max line width not taking indenting into account
 
 ## Backlog
 * [ ] Format comments to max line length
@@ -63,5 +63,8 @@ println!("{}", "1");
 ## Completed
 Each completed task has an associated issue number used for tracking changes to the code.
 
+* [ ] F0002: Smart wrapping
+  * [x] Wrap at the maximum line length using standard indent on next line
+  * [x] Function declarations should bump open brace to next line if params are wrapped
 * [x] **F0001**: Developer comments
 * [x] **F0000**: Skip trailing comma

@@ -60,6 +60,21 @@ mod tests {
     use indoc::indoc;
     use tracing_test::traced_test;
 
+    // Prettyplease is injecting spaces after references in function parameters
+    // e.g. println!("{}{}{}{}", & line, & only_space, & comment_line, & prev_char);
+    #[test]
+    fn fn_params_references() {
+        let source = indoc! {r#"
+            println!("{}", &line);
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                println!("{}", & line);
+            "#},
+        );
+    }
+
     #[test]
     fn fn_params() {
         let source = indoc! {r#"
@@ -89,7 +104,6 @@ mod tests {
     // * trailing comma when unnecessary
     //
     // TODO
-    // * close paraen on line byself
     // * spaces between the reference indicators and the type
     #[test]
     fn fn_where() {
@@ -120,8 +134,7 @@ mod tests {
                     &mut prev_char: W, &mut next_char: X)
                 where T: Display, U: Display, V: Display, W: Display, X: Display
                 {
-                    println!("{}{}{}{}{}", & line, & only_space, & comment_line, & prev_char, & next_char
-                    );
+                    println!("{}{}{}{}{}", & line, & only_space, & comment_line, & prev_char, & next_char);
                 }
             "#},
         );
@@ -175,8 +188,7 @@ mod tests {
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"
-                static NUMBERS: &'static [i32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
-                    17, 18];
+                static NUMBERS: &'static [i32] = &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18];
             "#}
         );
     }
@@ -212,8 +224,8 @@ mod tests {
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"
-                println!("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2", "3", "4",
-                    "5", "6", "7", "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18");
+                println!("{} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {} {}", "1", "2", "3", "4", "5", "6", "7",
+                    "8", "9", "10", "11", "12", "13", "14", "15", "16", "17", "18");
             "#},
         );
     }

@@ -1,13 +1,27 @@
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub(crate) indent: isize,         // 4?
-    pub(crate) max_line_width: isize, // 89?
+    pub(crate) indent: isize,         // Line indent in spaces
+    pub(crate) max_line_width: isize, // Maximum line width before wrapping occurs
     pub(crate) min_line_width: isize, // 60?
 
     /// Enable or disable features
     comments: bool,
     smart_wrapping: bool,
     skip_trailing_comma: bool,
+}
+
+/// Default implementation
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            indent: 4,
+            max_line_width: 100,
+            min_line_width: 60,
+            comments: true,
+            smart_wrapping: true,
+            skip_trailing_comma: true,
+        }
+    }
 }
 
 impl Config {
@@ -56,19 +70,5 @@ impl Config {
     /// Return true if skip_trailing_comma is enabled
     pub fn skip_trailing_comma(&self) -> bool {
         self.skip_trailing_comma
-    }
-}
-
-/// Default implementation
-impl Default for Config {
-    fn default() -> Self {
-        Self {
-            indent: 4,
-            max_line_width: 89,
-            min_line_width: 60,
-            comments: true,
-            smart_wrapping: true,
-            skip_trailing_comma: true,
-        }
     }
 }
