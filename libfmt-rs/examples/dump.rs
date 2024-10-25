@@ -1,4 +1,4 @@
-use libfmt-rs::Result;
+use libfmt_rs::Result;
 use tracing::Level;
 use tracing_subscriber::FmtSubscriber;
 
@@ -10,7 +10,7 @@ fn main() -> Result<()> {
 
     // Pass in an example
     let path = "examples/dump.rs";
-    let formatted = libfmt-rs::format_file(path)?;
+    let formatted = libfmt_rs::format_file(path)?;
     println!("{}", formatted);
 
     Ok(())

@@ -826,7 +826,7 @@ mod tests {
     #[test]
     fn multi_comment_types() {
         let source = indoc! {r#"
-            use libfmt-rs::Result;
+            use libfmt_rs::Result;
 
             fn main() -> Result<()> {
                 let subscriber = FmtSubscriber::builder()
@@ -836,7 +836,7 @@ mod tests {
 
                 // Pass in an example
                 let path = "examples/dump.rs";
-                let formatted = libfmt-rs::format_file(path)?;
+                let formatted = libfmt_rs::format_file(path)?;
                 print!("{}", formatted);
 
                 Ok(())
@@ -845,7 +845,7 @@ mod tests {
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"
-                use libfmt-rs::Result;
+                use libfmt_rs::Result;
 
                 fn main() -> Result<()> {
                     let subscriber = FmtSubscriber::builder().with_max_level(Level::TRACE).finish();
@@ -853,7 +853,7 @@ mod tests {
 
                     // Pass in an example
                     let path = "examples/dump.rs";
-                    let formatted = libfmt-rs::format_file(path)?;
+                    let formatted = libfmt_rs::format_file(path)?;
                     print!("{}", formatted);
 
                     Ok(())
