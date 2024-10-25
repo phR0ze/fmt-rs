@@ -116,7 +116,7 @@ Here's what I found:
   * Depends on older published AST crates that require an older version of nightly to compile
 
 ### Verbatim
-From what I can tell Verbatim in the `syn` package's way to deal with new Rust syntax that is added
+From what I can tell Verbatim is `syn` package's way to deal with new Rust syntax that is added
 between syn releases.  That is to say that it can be parsed and represented in an intermediate 
 generic set of types, but cannot be represented in syn's standard types as syn doesn't yet support 
 the new syntax.
