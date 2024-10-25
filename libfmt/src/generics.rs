@@ -322,7 +322,7 @@ impl Engine {
 
                 // Need a final newline as we won't be using them by default in this case
                 // Feature F0002: Smart wrapping
-                // Feature F0000: Skip trailing comma
+                // Feature F0000: Drop trailing comma
                 } else if predicate.is_last && self.config.smart_wrapping() {
                     self.scan_break_newline();
                     self.update_break_offset(-self.config.indent);

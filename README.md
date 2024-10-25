@@ -2,17 +2,21 @@
 WIP: Simple Rust source code formatter.
 
 ### Goals
-* Reduce scrolling due to extreme vertical alignment prejudice
+* Reduce scrolling and poor use of screen real estate
 * Provide something closer to the `gofmt` design pattern
 * Able to be built with off the shelf crates and stable Rust
 
 ### Usage
 WIP: working on a simple cli binary to read and format Rust code
 
+### Quick links
+* [Existing work](#existing-work)
+* [Existing work](#existing-work)
+
 ### Existing work
 The only works in this space that I could find were non-starters based on my intended goals. David 
 Tolnay's excellent `PrettyPlease` was the closest option but is really intended for a different 
-purpose and adhere's to Rustfmt's styling as well.
+purpose and additionally adhere's closely to Rustfmt's styling.
 
 * [PrettyPlease](https://github.com/dtolnay/prettyplease)
   * Excellent work by David Tolnay
@@ -21,7 +25,7 @@ purpose and adhere's to Rustfmt's styling as well.
   * Follow's Rustfmt's style quite closely
   * Designed for formatting generated code and as such:
     * Doesn't support comments in code
-    * Accepts nested code formatting 
+    * Accepts nested code formatting without regard to total line length
 * [GeneMichaels](https://github.com/andrewbaxter/genemichaels)
   * Leverages David Tolnay's `Syn` package directly which is what `prettyplease` is based on
   * Claims to format all code including macros and comments
@@ -38,9 +42,9 @@ purpose and adhere's to Rustfmt's styling as well.
 ## Research
 
 ### Verbatim
-Verbatim in the syn package is a way to deal with new Rust syntax that is added between syn releases.
-That is to say that it can be parsed, but cannot be represented in syn's types as syn doesn't yet 
-support the new syntax.
+From what I can tell Verbatim in the syn package is a way to deal with new Rust syntax that is added
+between syn releases.  That is to say that it can be parsed, but cannot be represented in syn's
+types as syn doesn't yet support the new syntax.
 
 **References**
 * [syn github](https://github.com/dtolnay/syn/issues/251)

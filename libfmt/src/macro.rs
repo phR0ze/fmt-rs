@@ -163,6 +163,7 @@ impl Engine {
             Ident,
             IdentBang,
             Delim,
+            Ampersand,
             Other,
         }
 
@@ -195,7 +196,9 @@ impl Engine {
                 (_, Token::Group(Delimiter::Parenthesis | Delimiter::Bracket, _)) => (true, Delim),
                 (_, Token::Group(Delimiter::Brace | Delimiter::None, _)) => (true, Other),
                 (_, Token::Ident(ident)) if !is_keyword(ident) => {
-                    (state != Dot && state != Colon2, Ident)
+                    // By adding the Ampersand state here we can avoid a trailing space
+                    // Feature F0003: Remove ampersand tailing space
+                    (state != Dot && state != Colon2 && state != Ampersand, Ident)
                 }
                 (_, Token::Literal(_)) => (state != Dot, Ident),
                 (_, Token::Punct(',' | ';', _)) => (false, Other),
@@ -203,9 +206,15 @@ impl Engine {
                 (_, Token::Punct(':', Spacing::Joint)) => (state != Ident, Colon),
                 (_, Token::Punct('$', _)) => (true, Dollar),
                 (_, Token::Punct('#', _)) => (true, Pound),
+
+                // Keeping the preceeding space as per original functionality but now tracking that
+                // the specific Ampersand state so that we can use it to determine if the next value
+                // which is an Ident needs its own preceeding space; which it does not.
+                // Feature F0003: Remove ampersand tailing space
+                (_, Token::Punct('&', _)) => (true, Ampersand),
+
                 (_, _) => (true, Other),
             };
-
             if !previous_is_joint {
                 if needs_space {
                     self.scan_break_space();

@@ -347,7 +347,7 @@ impl Engine {
             match left.token {
                 Scan::String(string) => {
                     // Feature: F0000
-                    if self.skip_trailing_comma(&string) {
+                    if self.drop_trailing_comma(&string) {
                         continue;
                     }
                     self.left_total += left.size;

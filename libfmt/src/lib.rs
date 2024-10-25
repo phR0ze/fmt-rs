@@ -1,4 +1,4 @@
-mod F0000_skip_trailing_comma;
+mod F0000_drop_trailing_comma;
 mod F0001_feature_comments;
 mod F0002_feature_smart_wrap;
 pub(crate) mod attrs;

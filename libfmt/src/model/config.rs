@@ -7,7 +7,7 @@ pub struct Config {
     /// Enable or disable features
     comments: bool,
     smart_wrapping: bool,
-    skip_trailing_comma: bool,
+    drop_trailing_comma: bool,
 }
 
 /// Default implementation
@@ -19,7 +19,7 @@ impl Default for Config {
             min_line_width: 60,
             comments: true,
             smart_wrapping: true,
-            skip_trailing_comma: true,
+            drop_trailing_comma: true,
         }
     }
 }
@@ -34,7 +34,7 @@ impl Config {
         Self {
             comments: false,
             smart_wrapping: false,
-            skip_trailing_comma: false,
+            drop_trailing_comma: false,
             ..Self::default()
         }
     }
@@ -51,9 +51,9 @@ impl Config {
         self
     }
 
-    /// Disable skipping trailing comma
-    pub fn with_no_skip_trailing_comma(mut self) -> Self {
-        self.skip_trailing_comma = false;
+    /// Disable dropping trailing comma
+    pub fn with_no_drop_trailing_comma(mut self) -> Self {
+        self.drop_trailing_comma = false;
         self
     }
 
@@ -67,8 +67,8 @@ impl Config {
         self.smart_wrapping
     }
 
-    /// Return true if skip_trailing_comma is enabled
-    pub fn skip_trailing_comma(&self) -> bool {
-        self.skip_trailing_comma
+    /// Return true if drop_trailing_comma is enabled
+    pub fn drop_trailing_comma(&self) -> bool {
+        self.drop_trailing_comma
     }
 }

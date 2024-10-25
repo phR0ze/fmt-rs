@@ -1,14 +1,59 @@
-# libfmt
+# libfmtrs
 
 ### Quick links
 * [Features](#features)
+  * [F0003: Drop Amerpesand trailing space](#f0003-drop-ampersand-trailing-space)
+  * [F0002: Smart wrapping ](#f0002-smart-wrapping)
   * [F0001: Developer comments](#f0001-developer-comments)
-  * [F0000: Skip trailing comma](#f0000-skip-trailing-comma)
+  * [F0000: Drop trailing comma](#f0000-drop-trailing-comma)
 
 ## Features
+These are departures from the default rustfmt or prettyplease formatting behaviors.
+
+### F0003: Drop Amerpsand trailing space
+Rustfmt and Prettyplease both leave a trailling comma after parameter lists.
+
+```rust
+// prettyplease
+println!("{}", & line);
+
+// libfmtrs
+println!("{}", &line);
+```
+
+### F0002: Smart wrapping
+```rust
+// rustfmt
+fn reset<T, U, V, W, X>(
+    &mut newline: T,
+    &mut only_space: U,
+    &mut comment_line: V,
+    &mut prev_char: W,
+    &mut next_char: X,
+) where
+    T: Display,
+    U: Display,
+    V: Display,
+    W: Display,
+    X: Display,
+{
+    println!(
+        "{}{}{}{}{}",
+        &line, &only_space, &comment_line, &prev_char, &next_char
+    );
+}
+
+// libfmtrs
+fn reset<T, U, V, W, X>(&mut newline: T, &mut only_space: U, &mut comment_line: V,
+    &mut prev_char: W, &mut next_char: X)
+where T: Display, U: Display, V: Display, W: Display, X: Display
+{
+    println!("{}{}{}{}{}", &line, &only_space, &comment_line, &prev_char, &next_char);
+}
+```
 
 ### F0001: Developer comments
-Initial support for basic developer comments
+Initial support for basic developer comments, not supported by PrettyPlease
 
 * Empty line comments
   ```rust
@@ -36,17 +81,19 @@ Initial support for basic developer comments
   println!("{}", "1"); // This is a trailing comment
   ```
 
-### F0000: Skip trailing comma
+### F0000: Drop trailing comma
+Rustfmt and Prettyplease both leave a trailling comma after parameter lists.
+
 ```rust
-// rustfmt leaves a trailing comma after parameter lists
+// rustfmt
 println!("{}", "1",);
 
-// libfmt removes the trailing comma 
+// libfmtrs
 println!("{}", "1");
 ```
 
 ## Current
-* [ ] F0003: References get a space after them when used as function params
+* [ ] F0003: Remove Ampersand trailing space
 * [ ] F0002: Smart wrapping
   * [ ] Max line width not taking indenting into account
 
@@ -67,4 +114,4 @@ Each completed task has an associated issue number used for tracking changes to 
   * [x] Wrap at the maximum line length using standard indent on next line
   * [x] Function declarations should bump open brace to next line if params are wrapped
 * [x] **F0001**: Developer comments
-* [x] **F0000**: Skip trailing comma
+* [x] **F0000**: Drop trailing comma

@@ -4,8 +4,8 @@ impl Engine {
     /// If the given value is a comma and the scan buffer still has more tokens and the next token
     /// is an End token, then skip the trailing comma.
     /// * Feature: F0000
-    pub fn skip_trailing_comma(&self, value: &str) -> bool {
-        if !self.config.skip_trailing_comma() {
+    pub fn drop_trailing_comma(&self, value: &str) -> bool {
+        if !self.config.drop_trailing_comma() {
             return false;
         }
 
@@ -36,7 +36,7 @@ mod tests {
     use indoc::indoc;
     use tracing_test::traced_test;
 
-    // Feature F0000: Skip trailing comma
+    // Feature F0000: Drop trailing comma
     // ---------------------------------------------------------------------------------------------
     // rustfmt: leaves a trailing comma in parameter lists
     // Prettyplease: leaves a trailing comma in parameter lists

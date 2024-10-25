@@ -65,12 +65,12 @@ mod tests {
     #[test]
     fn fn_params_references() {
         let source = indoc! {r#"
-            println!("{}", &line);
+            println!("{}", & line);
         "#};
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"
-                println!("{}", & line);
+                println!("{}", &line);
             "#},
         );
     }
@@ -93,7 +93,7 @@ mod tests {
                 fn reset(&mut line: String, &mut only_space: String, &mut comment_line: String,
                     &mut prev_char: String)
                 {
-                    println!("{}{}{}{}", & line, & only_space, & comment_line, & prev_char);
+                    println!("{}{}{}{}", &line, &only_space, &comment_line, &prev_char);
                 }
             "#},
         );
@@ -134,7 +134,7 @@ mod tests {
                     &mut prev_char: W, &mut next_char: X)
                 where T: Display, U: Display, V: Display, W: Display, X: Display
                 {
-                    println!("{}{}{}{}{}", & line, & only_space, & comment_line, & prev_char, & next_char);
+                    println!("{}{}{}{}{}", &line, &only_space, &comment_line, &prev_char, &next_char);
                 }
             "#},
         );
