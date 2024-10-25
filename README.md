@@ -3,7 +3,7 @@ WIP: Simple Rust source code formatter.
 
 ### Goals
 * Reduce scrolling and poor use of screen real estate
-* Provide something closer to the `gofmt` design pattern
+* Provide something closer to the `gofmt` experience
 * Able to be built with off the shelf crates and stable Rust
 
 ### Usage
@@ -11,7 +11,11 @@ WIP: working on a simple cli binary to read and format Rust code
 
 ### Quick links
 * [Preamble](#preamble)
-  * [Existing work](#existing-work)
+* [Research](#research)
+* [Legal](#legal)
+  * [Disclaimer](#dislaimer)
+  * [Contributions](#contributions)
+  * [License](#license)
 
 ## Preamble
 That is to say, how I arrived at the point where I was willing to invest countless hours building my 
@@ -68,23 +72,29 @@ on my IDE screen on the left with 3/4 of the screen to the right empty to be fru
 That said occastionally a few sparing newlines can improve readability tremendously without wasting 
 screen real estate e.g. a single whitespace line after a function declaration provides a nice visual 
 break that aids separation between function and body; too bad Rustfmt doesn't allow for that and 
-removes it once I hit save.
+removes it once I hit save :(
 
 ### Function braces
-I've gone back and forth on this. Typically I prefer the `brace_style = SameLineWhere` rust defaults 
-for this as I find again reducing vertical space whenever possible to be a better use of screen
-realestate. However I find myself tempted to use the `AlwaysNextLine` option in one specific case. 
-I'm a heavy comment user and tend to add comments to sections of functions. Often this means that 
-I'll add a comment to the first section of code in a function. In this case rustfmt will move the 
-commend up to be just under the function definition rather than allow a clean space to give visual 
-separation for the comment. To work around this you can use the `AlwaysNextLine` brace option to put 
-the brace in between and give a nice visual separation. Unfortunatly the trade off is that you loose 
-vertical space in so many other cases like struct definitions.
+I've gone back and forth on this. Typically I prefer the Rustfmt option `brace_style = SameLineWhere` 
+as I find again reducing vertical space whenever possible to be a better use of screen real estate. 
+However I find myself tempted to use the `AlwaysNextLine` option in one specific case. I'm a heavy 
+comment user and tend to add comments to sections of functions. Often this means that I'll add a 
+comment to the first section of code in a function. In this case rustfmt will remove the first 
+newline thus moving my comment up to be just under the function declaration rather than allow a clean 
+space to give visual separation for the comment. To work around this you can use the `AlwaysNextLine` 
+brace option to put the brace in between and give a nice visual separation. Unfortunatly the trade 
+off is that you loose vertical space in so many other cases like struct declarations where you don't 
+actually need the space separation. Simply allowing for honoring a user's whitespace would alleviate 
+this concern. Alas not supported in Rustfmt.
+
+## Research
+
 ### Existing work
 The only works in this space that I could find were non-starters based on my intended goals. David 
 Tolnay's excellent `PrettyPlease` was the closest option but is really intended for a different 
 purpose and additionally adhere's closely to Rustfmt's styling.
 
+Here's what I found:
 * [PrettyPlease](https://github.com/dtolnay/prettyplease)
   * Excellent work by David Tolnay
   * Pioneered the ability to build a tool like this from crates.io with stable rust
@@ -106,12 +116,11 @@ purpose and additionally adhere's closely to Rustfmt's styling.
 * [rsfmt](https://github.com/zBaitu/rsfmt)
   * Depends on older published AST crates that require an older version of nightly to compile
 
-## Research
-
 ### Verbatim
-From what I can tell Verbatim in the syn package is a way to deal with new Rust syntax that is added
-between syn releases.  That is to say that it can be parsed, but cannot be represented in syn's
-types as syn doesn't yet support the new syntax.
+From what I can tell Verbatim in the `syn` package's way to deal with new Rust syntax that is added
+between syn releases.  That is to say that it can be parsed and represented in an intermediate 
+generic set of types, but cannot be represented in syn's standard types as syn doesn't yet support 
+the new syntax.
 
 **References**
 * [syn github](https://github.com/dtolnay/syn/issues/251)
@@ -125,13 +134,24 @@ types as syn doesn't yet support the new syntax.
 
 Outter doc attributes are attributes associated with programmatic components inside the application 
 while Inner doc attributes are those associated with the module or package. Quite counter intuitive 
-really.
+really from the way I look at it.
 
-## Contributing
-The Rust AST related crates can only be built on `Nightly`.
+## Legal
 
-### NixOS dev shell
-To setup a NixOS dev shell run `nix develop` from the root of this project which will use the 
-`flake.nix` to install Rust nightly and make it available in the shell.
+### Disclaimer
+As with all open source projects this project is offered ***as-is***, without warranty, and disclaims 
+all liability for damages resulting from using this project. No support or guarantees of any kind 
+implied or otherwise are offered. Any bug fixes, enhancements or guidance are purely at the 
+discretion of the author of this project.
+
+### Contributing
+Input and PRs are welcome. Know however that they will only be accepted if they have supporting unit 
+tests, documentation and fit with the highly subjective goals of this project; which goals are 
+subject to change at any moment without notice.
+
+### License
+This project is dual licensed per typical Rust code under the 
+[MIT](https://github.com/phR0ze/fmt-rs/blob/main/LICENSE-MIT) and
+[Apache 2](https://github.com/phR0ze/fmt-rs/blob/main/LICENSE-APACHE) licenses.
 
 

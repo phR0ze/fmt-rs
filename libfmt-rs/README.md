@@ -61,17 +61,20 @@ Initial support for basic developer comments, not supported by PrettyPlease
     // Example input code
     fn print() {
 
+        // A newline above this block of code is often a nice visual separation
         println!("Hello");
     }
 
     // Rustfmt will remove the newline, squashing my function body to the function declaration
     fn print() {
+        // A newline above this block of code is often a nice visual separation
         println!("Hello");
     }
 
     // libfmt-rs will simply honor your formatting choice
     fn print() {
 
+        // A newline above this block of code is often a nice visual separation
         println!("Hello");
     }
   ```

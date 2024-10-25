@@ -646,7 +646,6 @@ mod tests {
     use itertools::{peek_nth, PeekNth};
     use proc_macro2::{Group, Literal, TokenStream};
     use std::str::FromStr;
-    use tracing_test::traced_test;
 
     #[test]
     fn allow_func_separation_from_body() {
@@ -654,6 +653,7 @@ mod tests {
         let source = indoc! {r#"
             fn print() {
 
+                // A newline above this first block of code is often a nice visual separation
                 println!("Hello");
             }
         "#};
@@ -662,6 +662,7 @@ mod tests {
             indoc! {r#"
                 fn print() {
 
+                    // A newline above this first block of code is often a nice visual separation
                     println!("Hello");
                 }
             "#},
@@ -1060,6 +1061,7 @@ mod tests {
         fn comments_after<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comments_before<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comment_count(&self) -> usize;
+        #[allow(dead_code)]
         fn print(&self);
     }
     impl<I: Iterator<Item = TokenTree> + Clone> TokensExt for I {
