@@ -1,6 +1,20 @@
 use crate::engine::Engine;
 
 impl Engine {
+    /// Check if we just wrapped.
+    ///
+    /// * **WARNING** only works once as it clears the value
+    /// * **WARNING** this only works in as much as the accumulation in block of code is tracking it
+    pub fn smart_wrapping_wrapped(&mut self) -> bool {
+        if self.config.smart_wrapping() {
+            if self.right_total.delta() > self.config.max_line_width {
+                self.right_total.reset_delta();
+                return true;
+            }
+        }
+        false
+    }
+
     /// Smart wrapping for block begin falling back on original behavior if disabled.
     /// * Features F0002: Smart wrapping
     pub fn smart_wrap_begin_default(&mut self) {

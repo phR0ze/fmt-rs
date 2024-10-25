@@ -56,7 +56,7 @@ pub struct Engine {
 
     /// Used to track how much of the max line width is still available. As characters are printed,
     /// this value is decremented.
-    pub(crate) space: isize,
+    pub(crate) space: Delta,
 
     /// Ring buffer of tokens and calculated size of strings i.e. number of characters
     pub(crate) scan_buf: RingBuffer<BufEntry>,
@@ -90,12 +90,12 @@ pub struct Engine {
 
 impl Engine {
     pub fn new(source: &str, config: Config) -> Self {
-        let margin = config.margin;
+        let max_line_width = config.max_line_width;
         Self {
             config,
             src: source.into(),
             out: String::new(),
-            space: margin,
+            space: Delta::from(max_line_width),
             scan_buf: RingBuffer::new(),
             left_total: 0,
             right_total: Delta::default(),
@@ -154,14 +154,14 @@ impl Engine {
                             self.scan_buf.pop_last();
                             self.scan_blocks.pop_back();
                             self.scan_blocks.pop_back();
-                            self.right_total -= (break_token.blank_space as isize).into();
+                            self.right_total.sub(break_token.blank_space);
                             return;
                         }
                     }
                     if break_token.if_nonempty {
                         self.scan_buf.pop_last();
                         self.scan_blocks.pop_back();
-                        self.right_total -= (break_token.blank_space as isize).into();
+                        self.right_total.sub(break_token.blank_space);
                     }
                 }
             }
@@ -193,7 +193,7 @@ impl Engine {
             size: -self.right_total,
         });
         self.scan_blocks.push_back(right);
-        self.right_total += (token.blank_space as isize).into();
+        self.right_total.add(token.blank_space);
 
         trace!("{}", self);
     }
@@ -214,7 +214,7 @@ impl Engine {
             });
 
             // Update the total string length to include the new string
-            self.right_total += len.into();
+            self.right_total.add_isize(len);
 
             self.print_if_past_max_line_width();
         }
@@ -259,7 +259,7 @@ impl Engine {
                                     token: Scan::String(Cow::Borrowed("")),
                                     size: SIZE_INFINITY,
                                 });
-                                self.right_total += SIZE_INFINITY.into();
+                                self.right_total.add_isize(SIZE_INFINITY);
                             }
                         }
                         break;
@@ -279,7 +279,7 @@ impl Engine {
         trace!("Print if past max line width");
 
         // While the current stream is longer than the allowed max width
-        while self.right_total - self.left_total.into() > self.space.into() {
+        while self.right_total.value() - self.left_total > self.space.value() {
             // Pop the first element from the scan stack if it is also the first
             // element in the scan buffer, then update the scan buffer element's size to infinity.
             if *self.scan_blocks.front().unwrap() == self.scan_buf.index_of_first() {
@@ -378,7 +378,7 @@ impl Engine {
     fn print_begin(&mut self, token: BeginToken, size: isize) {
         trace!("Print begin");
 
-        if size > self.space {
+        if size > self.space.value() {
             self.print_stack
                 .push(PrintFrame::Broken(self.indent, token.flow));
             self.indent = usize::try_from(self.indent as isize + token.offset).unwrap();
@@ -410,14 +410,14 @@ impl Engine {
             || match self.get_print_top() {
                 PrintFrame::Fits(..) => true,
                 PrintFrame::Broken(.., Flow::Vertical) => false,
-                PrintFrame::Broken(.., Flow::Horizontal) => size <= self.space,
+                PrintFrame::Broken(.., Flow::Horizontal) => size <= self.space.value(),
             };
         if fits {
             self.pending_indentation += token.blank_space;
-            self.space -= token.blank_space as isize;
+            self.space.sub(token.blank_space);
             if let Some(no_break) = token.no_break {
                 self.out.push(no_break);
-                self.space -= no_break.len_utf8() as isize;
+                self.space.sub(no_break.len_utf8());
             }
 
         // A hard break is required
@@ -430,12 +430,15 @@ impl Engine {
             self.out.push('\n');
             let indent = self.indent as isize + token.offset;
             self.pending_indentation = usize::try_from(indent).unwrap();
-            self.space = cmp::max(self.config.margin - indent, self.config.min_space);
+            self.space.set(cmp::max(
+                self.config.max_line_width - indent,
+                self.config.min_line_width,
+            ));
 
             if let Some(post_break) = token.post_break {
                 self.print_indent();
                 self.out.push(post_break);
-                self.space -= post_break.len_utf8() as isize;
+                self.space.sub(post_break.len_utf8());
             }
         }
 
@@ -448,7 +451,7 @@ impl Engine {
 
         self.print_indent();
         self.out.push_str(&value);
-        self.space -= value.len() as isize;
+        self.space.sub(value.len());
 
         if !self.out.is_empty() {
             trace!("Print stack: {:?}", self.print_stack);
@@ -473,7 +476,7 @@ impl fmt::Display for Engine {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Engine {{")?;
         writeln!(f, "  out: {}", self.out)?;
-        writeln!(f, "  space: {}", self.space)?;
+        writeln!(f, "  space: {}", self.space.value())?;
 
         // Convert self.buf to debug string, split on newline, indent each line, and rejoin
         let buf = format!("{}", self.scan_buf);

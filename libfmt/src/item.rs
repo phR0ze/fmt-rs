@@ -701,6 +701,8 @@ impl Engine {
     }
 
     fn signature(&mut self, signature: &Signature) {
+        self.right_total.track_adds();
+
         if signature.constness.is_some() {
             self.scan_string("const ");
         }
@@ -745,6 +747,8 @@ impl Engine {
         self.scan_begin_vertical(-self.config.indent);
         self.return_type(&signature.output);
         self.scan_end();
+
+        self.right_total.stop_tracking();
     }
 
     fn fn_arg(&mut self, fn_arg: &FnArg) {

@@ -1,8 +1,8 @@
 #[derive(Debug, Clone)]
 pub struct Config {
-    pub(crate) indent: isize,    // 4?
-    pub(crate) margin: isize,    // 89?
-    pub(crate) min_space: isize, // 60?
+    pub(crate) indent: isize,         // 4?
+    pub(crate) max_line_width: isize, // 89?
+    pub(crate) min_line_width: isize, // 60?
 
     /// Enable or disable features
     comments: bool,
@@ -64,8 +64,8 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             indent: 4,
-            margin: 89,
-            min_space: 60,
+            max_line_width: 89,
+            min_line_width: 60,
             comments: true,
             smart_wrapping: true,
             skip_trailing_comma: true,

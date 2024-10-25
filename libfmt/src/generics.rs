@@ -292,12 +292,12 @@ impl Engine {
                 } else {
                     // Use newline to separate the signature from the body if signature was wrapped
                     // Feature F0002: Smart wrapping
-                    // if self.config.smart_wrapping() {
-                    //     self.scan_break_newline();
-                    //     self.update_break_offset(-self.config.indent);
-                    // } else {
-                    self.scan_space();
-                    // }
+                    if self.smart_wrapping_wrapped() {
+                        self.scan_break_newline();
+                        self.update_break_offset(-self.config.indent);
+                    } else {
+                        self.scan_space();
+                    }
                 }
                 return;
             }
