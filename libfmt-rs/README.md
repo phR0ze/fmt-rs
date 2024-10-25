@@ -6,6 +6,7 @@
   * [F0002: Smart wrapping ](#f0002-smart-wrapping)
   * [F0001: Developer comments](#f0001-developer-comments)
   * [F0000: Drop trailing comma](#f0000-drop-trailing-comma)
+* [Backlog](#backlog)
 
 ## Features
 These are departures from the default rustfmt or prettyplease formatting behaviors.
@@ -54,6 +55,26 @@ where T: Display, U: Display, V: Display, W: Display, X: Display
 
 ### F0001: Developer comments
 Initial support for basic developer comments, not supported by PrettyPlease
+
+* Honor my comment style, i.e don't remove or add newlines, just use what I have
+  ```rust
+    // Example input code
+    fn print() {
+
+        println!("Hello");
+    }
+
+    // Rustfmt will remove the newline, squashing my function body to the function declaration
+    fn print() {
+        println!("Hello");
+    }
+
+    // libfmt-rs will simply honor your formatting choice
+    fn print() {
+
+        println!("Hello");
+    }
+  ```
 
 * Empty line comments
   ```rust

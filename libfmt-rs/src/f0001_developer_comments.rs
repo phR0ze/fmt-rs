@@ -64,7 +64,7 @@ impl<'a> Commenter<'a> {
         // -----------------------------------------------------------------------------------------
         if self.is_empty() && self.stream.is_empty() {
             src = self.source.range(None, None);
-            if let Some(comments) = parse_comments(src.as_deref(), false) {
+            if let Some(comments) = parse_comments(self.config, src.as_deref(), false) {
                 self.append_curr_comments(comments, true);
             }
         }
@@ -81,7 +81,7 @@ impl<'a> Commenter<'a> {
             // Leading comments - haven't processed any tokens yet
             if self.is_empty() {
                 src = self.source.range(None, Some(start));
-                if let Some(comments) = parse_comments(src.as_deref(), false) {
+                if let Some(comments) = parse_comments(self.config, src.as_deref(), false) {
                     self.append_curr_comments(comments, false);
                 }
             }
@@ -126,7 +126,7 @@ impl<'a> Commenter<'a> {
             let end = token1.span_open().0;
             let src = self.source.range(Some(start), Some(end));
 
-            if let Some(comments) = parse_comments(src.as_deref(), true) {
+            if let Some(comments) = parse_comments(self.config, src.as_deref(), true) {
                 // Determine if we have any trailing comments
                 let comments: Vec<Comment> = comments
                     .clone()
@@ -153,7 +153,7 @@ impl<'a> Commenter<'a> {
         let src = self.source.range(Some(start), end);
 
         let mut newline = false;
-        if let Some(comments) = parse_comments(src.as_deref(), true) {
+        if let Some(comments) = parse_comments(self.config, src.as_deref(), true) {
             // Trailing comments also act as line breaks
             newline = comments.iter().any(|x| x.is_break() || x.is_trailing());
 
@@ -278,7 +278,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to append
     /// * ***inner***: Append the given comments as inner comments
     fn append_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if !self.config.comments() {
+        if !self.config.developer_comments() {
             return;
         }
         for comment in comments {
@@ -293,7 +293,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to append
     /// * ***inner***: Append the given comments as inner comments
     fn append_next_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if !self.config.comments() {
+        if !self.config.developer_comments() {
             return;
         }
         for comment in comments {
@@ -308,7 +308,7 @@ impl<'a> Commenter<'a> {
     /// * ***comments***: Comments to prepend
     /// * ***inner***: Prepend the given comments as inner comments
     fn prepend_curr_comments(&mut self, comments: Vec<Comment>, inner: bool) {
-        if !self.config.comments() {
+        if !self.config.developer_comments() {
             return;
         }
         for comment in comments {
@@ -479,16 +479,17 @@ fn comment_to_tokens(comment: &Comment, inner: bool) -> Vec<TokenTree> {
 
 /// Parse comments from the given source range
 ///
+/// * ***config***: The configuration to honor
 /// * ***src***: The source to extract comments from
 /// * ***some***: There is at least one token in the source
-fn parse_comments(src: Option<&str>, some: bool) -> Option<Vec<Comment>> {
+fn parse_comments(config: &Config, src: Option<&str>, some: bool) -> Option<Vec<Comment>> {
     let src = src?;
     let mut comments: Vec<Comment> = vec![]; // final results
     let mut line = String::new(); // temp buffer
 
     // Track throughout
     let mut single_expected_newline = false;
-    let mut prev_empty_line = false;
+    let mut prev_empty_lines = 0;
     let mut comment_block = false;
 
     // Reset on each newline
@@ -543,13 +544,23 @@ fn parse_comments(src: Option<&str>, some: bool) -> Option<Vec<Comment>> {
                     comments.push(Comment::Break);
                     single_expected_newline = true;
 
-                // Only allow a single empty line consecutively regardless of context
-                } else if !prev_empty_line {
-                    prev_empty_line = true;
-                    comments.push(Comment::Empty);
+                // Only allow the specified amount of empty consecutive lines
+                } else {
+                    let allowed = match &config.num_empty_lines_allowed {
+                        Some(n) => match *n {
+                            n if prev_empty_lines < n => true,
+                            _ => false,
+                        },
+                        _ => true,
+                    };
+
+                    prev_empty_lines += 1;
+                    if allowed {
+                        comments.push(Comment::Empty);
+                    }
                 }
             } else {
-                prev_empty_line = false;
+                prev_empty_lines = 0;
             }
 
             reset(
@@ -561,7 +572,7 @@ fn parse_comments(src: Option<&str>, some: bool) -> Option<Vec<Comment>> {
             continue;
         } else if char != ' ' {
             only_space = false;
-            prev_empty_line = false;
+            prev_empty_lines = 0;
 
             // Block comments encompass everything until the end
             if comment_block {
@@ -636,6 +647,41 @@ mod tests {
     use proc_macro2::{Group, Literal, TokenStream};
     use std::str::FromStr;
     use tracing_test::traced_test;
+
+    #[test]
+    fn allow_func_separation_from_body() {
+        // Honor my style - don't remove my newline
+        let source = indoc! {r#"
+            fn print() {
+
+                println!("Hello");
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn print() {
+
+                    println!("Hello");
+                }
+            "#},
+        );
+
+        // Honor my style - don't add a newline, just do what I want
+        let source = indoc! {r#"
+            fn print() {
+                println!("Hello");
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn print() {
+                    println!("Hello");
+                }
+            "#},
+        );
+    }
 
     #[test]
     fn comment_trailing_item_macro() {
@@ -917,6 +963,26 @@ mod tests {
     }
 
     #[test]
+    fn allow_any_num_of_empty_lines() {
+        let source = indoc! {r#"
+
+
+
+            println!("{}", "1",);
+        "#};
+
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+
+
+
+                println!("{}", "1");
+            "#}
+        );
+    }
+
+    #[test]
     fn only_allow_one_empty_line() {
         let source = indoc! {r#"
 
@@ -925,7 +991,11 @@ mod tests {
         "#};
 
         assert_eq!(
-            crate::format_str(None, source).unwrap(),
+            crate::format_str(
+                Some(Config::new().with_num_empty_lines_allowed(Some(1))),
+                source
+            )
+            .unwrap(),
             indoc! {r#"
 
                 println!("{}", "1");
@@ -1432,6 +1502,26 @@ mod tests {
     }
 
     #[test]
+    fn allow_any_number_empty_lines_consecutively() {
+        let source = indoc! {r#"
+
+
+
+            println!("{}", "1");
+        "#};
+
+        // Check the tokens that were generated
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 3);
+        assert_eq!(
+            tokens.comments_before((3, 0)),
+            vec![Comment::empty(), Comment::empty(), Comment::empty()]
+        );
+    }
+
+    #[test]
     fn only_allow_single_empty_line_consecutively() {
         let source = indoc! {r#"
 
@@ -1439,11 +1529,10 @@ mod tests {
             println!("{}", "1");
         "#};
 
-        // Check the string beeing fed in
-        assert_eq!(source, "\n\nprintln!(\"{}\", \"1\");\n");
-
         // Check the tokens that were generated
-        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        let tokens = inject(&Config::new().with_num_empty_lines_allowed(Some(1)), source)
+            .unwrap()
+            .into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
         assert_eq!(tokens.comment_count(), 1);
