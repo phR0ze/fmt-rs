@@ -1,3 +1,9 @@
+// Feature F0000: Drop trailing comma
+// ---------------------------------------------------------------------------------------------
+// Problem statement: Rustfmt and Prettyplease both leave a trailing comma in parameter lists.
+//
+// Solution: Detect and drop the trailing comma when not in vertical listing format.
+// ---------------------------------------------------------------------------------------------
 use crate::{engine::Engine, model::Scan};
 
 impl Engine {
@@ -32,20 +38,16 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::Config;
     use indoc::indoc;
-    use tracing_test::traced_test;
 
-    // Feature F0000: Drop trailing comma
-    // ---------------------------------------------------------------------------------------------
-    // rustfmt: leaves a trailing comma in parameter lists
-    // Prettyplease: leaves a trailing comma in parameter lists
     #[test]
     fn item_macro() {
+        // rustfmt
         let source = indoc! {r#"
             println!("{}", "1",);
         "#};
 
+        // libfmt-rs
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"

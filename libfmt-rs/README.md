@@ -1,4 +1,4 @@
-# libfmtrs
+# libfmt-rs
 
 ### Quick links
 * [Features](#features)
@@ -17,7 +17,7 @@ Rustfmt and Prettyplease both leave a trailling comma after parameter lists.
 // prettyplease
 println!("{}", & line);
 
-// libfmtrs
+// libfmt-rs
 println!("{}", &line);
 ```
 
@@ -43,7 +43,7 @@ fn reset<T, U, V, W, X>(
     );
 }
 
-// libfmtrs
+// libfmt-rs
 fn reset<T, U, V, W, X>(&mut newline: T, &mut only_space: U, &mut comment_line: V,
     &mut prev_char: W, &mut next_char: X)
 where T: Display, U: Display, V: Display, W: Display, X: Display
@@ -88,7 +88,7 @@ Rustfmt and Prettyplease both leave a trailling comma after parameter lists.
 // rustfmt
 println!("{}", "1",);
 
-// libfmtrs
+// libfmt-rs
 println!("{}", "1");
 ```
 

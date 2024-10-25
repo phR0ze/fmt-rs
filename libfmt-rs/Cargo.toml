@@ -1,11 +1,11 @@
 [package]
-name = "libfmt"
+name = "libfmt-rs"
 version = "0.1.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 categories = ["development-tools"]
 description = "Simple Rust source code formatter library"
-repository = "https://github.com/phR0ze/fmt-rs/libfmt"
+repository = "https://github.com/phR0ze/fmt-rs/libfmt-rs"
 keywords = ["rustfmt"]
 exclude = [
     "docs",

@@ -3,6 +3,7 @@ mod break_token;
 mod comment;
 mod config;
 mod delta;
+pub(crate) mod error;
 mod position;
 mod print_frame;
 mod ring;

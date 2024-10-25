@@ -1,3 +1,9 @@
+// Feature F0001: Developer comments
+// ---------------------------------------------------------------------------------------------
+// Problem statement: Prettyplease doesn't support developer comments.
+//
+// Solution: Leverage the proc-macro2 support for attributes to retrofit developer comments.
+// ---------------------------------------------------------------------------------------------
 use crate::{
     model::{
         Comment, Config, OptionTokenExt, Position, Source, TokenExt, TokenGroup, TokenItem,
@@ -631,6 +637,302 @@ mod tests {
     use std::str::FromStr;
     use tracing_test::traced_test;
 
+    #[test]
+    fn comment_trailing_item_macro() {
+        let source = indoc! {r#"
+            println!("Hello"); // Hello
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                println!("Hello"); // Hello
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_trait() {
+        let source = indoc! {r#"
+            trait Foo { // Foo
+                type Item; // Bar
+
+                const FOO: i32 = 42; // Foo
+                fn foo(); // Func foo
+                fn foo2() { // Func foo2
+                    println!("Hello");
+                }
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                trait Foo { // Foo
+                    type Item; // Bar
+
+                    const FOO: i32 = 42; // Foo
+                    fn foo(); // Func foo
+                    fn foo2() { // Func foo2
+                        println!("Hello");
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_struct() {
+        let source = indoc! {r#"
+            struct Foo1; // Foo1 struct
+            struct Foo2 { // Foo2 struct
+                a: i32,     // A field
+                b: i32,     // B field
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo1; // Foo1 struct
+                struct Foo2 { // Foo2 struct
+                    a: i32, // A field
+                    b: i32, // B field
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_static() {
+        let source = indoc! {r#"
+            static FOO: i32 = 42; // Foo
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                static FOO: i32 = 42; // Foo
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_mod() {
+        let source = indoc! {r#"
+            mod foo; // Foo
+            mod foo2 { // Foo
+                fn foo() {
+                    println!("Hello");
+                }
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                mod foo; // Foo
+                mod foo2 { // Foo
+                    fn foo() {
+                        println!("Hello");
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_impl() {
+        let source = indoc! {r#"
+            struct Foo;
+
+            impl Foo { // Foo
+                fn foo() {
+                    println!("Hello");
+                }
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                struct Foo;
+
+                impl Foo { // Foo
+                    fn foo() {
+                        println!("Hello");
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_func() {
+        let source = indoc! {r#"
+            fn foo() { // Hello
+                println!("Hello");
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn foo() { // Hello
+                    println!("Hello");
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_item_enum() {
+        let source = indoc! {r#"
+            enum Enum2 { // Enum2
+                A, // A variant
+                B, // B variant
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                enum Enum2 { // Enum2
+                    A, // A variant
+                    B, // B variant
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_trailing_const() {
+        let source = indoc! {r#"
+            const FOO: i32 = 42; // Foo
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                const FOO: i32 = 42; // Foo
+            "#},
+        );
+    }
+
+    #[test]
+    fn comment_only_comments() {
+        let source = indoc! {r#"
+            // foo
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                // foo
+            "#},
+        );
+    }
+
+    #[test]
+    fn multi_comment_types() {
+        let source = indoc! {r#"
+            use libfmt-rs::Result;
+
+            fn main() -> Result<()> {
+                let subscriber = FmtSubscriber::builder()
+                    .with_max_level(Level::TRACE)
+                    .finish();
+                tracing::subscriber::set_global_default(subscriber).unwrap();
+
+                // Pass in an example
+                let path = "examples/dump.rs";
+                let formatted = libfmt-rs::format_file(path)?;
+                print!("{}", formatted);
+
+                Ok(())
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                use libfmt-rs::Result;
+
+                fn main() -> Result<()> {
+                    let subscriber = FmtSubscriber::builder().with_max_level(Level::TRACE).finish();
+                    tracing::subscriber::set_global_default(subscriber).unwrap();
+
+                    // Pass in an example
+                    let path = "examples/dump.rs";
+                    let formatted = libfmt-rs::format_file(path)?;
+                    print!("{}", formatted);
+
+                    Ok(())
+                }
+        "#}
+        );
+    }
+
+    #[test]
+    fn block_comment() {
+        let source = indoc! {r#"
+            /**************************
+             * ///  A foo struct  \\\ *
+             *  - one                 *
+             *  - two                 *
+             *************************/
+            struct Foo;
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                /**************************
+                 * ///  A foo struct  \\\ *
+                 *  - one                 *
+                 *  - two                 *
+                 *************************/
+                struct Foo;
+            "#},
+        );
+    }
+
+    #[test]
+    fn struct_definition_with_comments_and_whitespace() {
+        let source = indoc! {r#"
+
+            /// A foo struct
+            struct Foo {
+
+                // Field a
+                a: i32,
+
+                // Field b
+                b: i32,
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+
+                /// A foo struct
+                struct Foo {
+
+                    // Field a
+                    a: i32,
+
+                    // Field b
+                    b: i32,
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn only_allow_one_empty_line() {
+        let source = indoc! {r#"
+
+
+            println!("{}", "1",);
+        "#};
+
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+
+                println!("{}", "1");
+            "#}
+        );
+    }
+
     trait TokenTestsExt {
         fn as_group(self) -> Group;
         fn as_literal(self) -> Literal;
@@ -1012,7 +1314,7 @@ mod tests {
     }
 
     #[test]
-    fn multi_comment_types() {
+    fn multi_comment_types_token_level() {
         let source = indoc! {r#"
             use indoc::indoc;
 

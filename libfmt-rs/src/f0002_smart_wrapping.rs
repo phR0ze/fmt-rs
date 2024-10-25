@@ -1,3 +1,10 @@
+// Feature F0002: Smart wrapping
+// ---------------------------------------------------------------------------------------------
+// Problem statement: Rustfmt and Prettyplease both favor extreme vertical formatting.
+//
+// Solution: Default flow control to horizontal formatting thus using more of the available
+// screen real estate.
+// ---------------------------------------------------------------------------------------------
 use crate::engine::Engine;
 
 impl Engine {
@@ -56,24 +63,7 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::Config;
     use indoc::indoc;
-    use tracing_test::traced_test;
-
-    // Prettyplease is injecting spaces after references in function parameters
-    // e.g. println!("{}{}{}{}", & line, & only_space, & comment_line, & prev_char);
-    #[test]
-    fn fn_params_references() {
-        let source = indoc! {r#"
-            println!("{}", & line);
-        "#};
-        assert_eq!(
-            crate::format_str(None, source).unwrap(),
-            indoc! {r#"
-                println!("{}", &line);
-            "#},
-        );
-    }
 
     #[test]
     fn fn_params() {
@@ -220,7 +210,7 @@ mod tests {
             );
         "#};
 
-        // libfmt formatting
+        // libfmt-rs formatting
         assert_eq!(
             crate::format_str(None, source).unwrap(),
             indoc! {r#"

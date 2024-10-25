@@ -1,13 +1,12 @@
-mod F0000_drop_trailing_comma;
-mod F0001_feature_comments;
-mod F0002_feature_smart_wrap;
 pub(crate) mod attrs;
-pub(crate) mod comments;
 mod convenience;
 mod data;
 mod engine;
-mod error;
 mod expr;
+mod f0000_drop_trailing_comma;
+mod f0001_developer_comments;
+mod f0002_smart_wrapping;
+mod f0003_drop_ampersand_trailing_space;
 mod generics;
 mod item;
 mod iter;
@@ -27,7 +26,7 @@ use std::path::Path;
 use tracing::trace;
 
 // Re-export the public API
-pub use error::{Error, Result};
+pub use model::error::{Error, Result};
 
 /// Format the given source file
 pub fn format_file<T: AsRef<Path>>(path: T) -> Result<String> {
@@ -49,7 +48,7 @@ impl Engine {
         trace!("Formatting");
 
         // Pre-process the token stream for comment locational information
-        let tokens = comments::inject(&self.config, &self.src)?;
+        let tokens = f0001_developer_comments::inject(&self.config, &self.src)?;
 
         // Parse the syntax tree from the token stream
         let ast: syn::File = syn::parse2(tokens)

@@ -4,7 +4,7 @@
 
 // fn test(tokens: TokenStream, expected: &str) {
 //     let syntax_tree: syn::File = syn::parse2(tokens).unwrap();
-//     let pretty = libfmt::format_syn_file(&syntax_tree).unwrap();
+//     let pretty = libfmt-rs::format_syn_file(&syntax_tree).unwrap();
 //     assert_eq!(pretty, expected);
 // }
 
