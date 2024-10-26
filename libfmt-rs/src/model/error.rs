@@ -3,11 +3,12 @@ use std::{fmt, io};
 pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug)]
-#[non_exhaustive]
 pub struct Error {
     msg: String,
     data: Option<String>,
-    source: Option<Box<dyn std::error::Error>>,
+
+    // Need Send and Sync to satisfy anyhow::Error
+    source: Option<Box<dyn std::error::Error + Send + Sync>>,
 }
 
 impl Error {
@@ -32,32 +33,33 @@ impl Error {
 
     /// Add the given error as a source to this error.
     pub(crate) fn wrap_io(mut self, err: io::Error) -> Self {
-        self.source = Some(Box::new(err));
+        // Athough Send and Sync are implemented by this error type converting allows for a title
+        self.source = Some(Box::new(SourceError::from("io::Error: ", err)));
         self
     }
 
     /// Add the given error as a source to this error.
     pub(crate) fn wrap_lex(mut self, err: proc_macro2::LexError) -> Self {
-        self.source = Some(Box::new(err));
+        // LexError does not implement Send or Sync thus we need to convert it to
+        // a SourceError that does to satisfy the anyhow which most consumers will likely use
+        self.source = Some(Box::new(SourceError::from("proc_macro2::LexError: ", err)));
         self
     }
 
     /// Add the given error as a source to this error.
     pub(crate) fn wrap_syn(mut self, err: syn::Error) -> Self {
-        self.source = Some(Box::new(err));
-        self
-    }
-
-    /// Add the given error as a source to this error.
-    pub(crate) fn wrap_any(mut self, err: Box<dyn std::error::Error>) -> Self {
-        self.source = Some(err);
+        // Athough Send and Sync are implemented by this error type converting allows for a title
+        self.source = Some(Box::new(SourceError::from("syn::Error: ", err)));
         self
     }
 }
 
 impl std::error::Error for Error {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        self.source.as_ref().map(|s| s.as_ref())
+        self.source
+            .as_ref()
+            // Need to cast to a lessor trait to satisfy the return type
+            .map(|x| x.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 
@@ -81,6 +83,56 @@ impl fmt::Display for Error {
     }
 }
 
+/// ContextError is a simple error type that allows for converting underlying errors
+/// into into a more readable error message with a prefix to indicate the underlying
+/// component that generated the error.
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct SourceError {
+    prefix: String,
+    msg: String,
+    source: Option<Box<SourceError>>,
+}
+
+impl SourceError {
+    /// Convert the given error into an `SourceError` or chain of `SourceError`s
+    pub(crate) fn from<T: std::error::Error>(prefix: &str, err: T) -> Self {
+        let under = Self {
+            prefix: prefix.into(),
+            msg: err.to_string(),
+            source: if let Some(err) = err.source() {
+                Some(Self::from(prefix, err).into())
+            } else {
+                None
+            },
+        };
+
+        under
+    }
+}
+
+impl fmt::Display for SourceError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}{}", self.prefix, self.msg)
+    }
+}
+
+impl std::error::Error for SourceError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match &self.source {
+            Some(source) => Some(source),
+            None => None,
+        }
+    }
+}
+
+// Provides a way to get the generic Error type
+impl AsRef<dyn std::error::Error> for SourceError {
+    fn as_ref(&self) -> &(dyn std::error::Error + 'static) {
+        self
+    }
+}
+
 #[cfg(test)]
 pub(crate) fn to_string<T: AsRef<dyn std::error::Error>>(err: T) -> String {
     let mut errs: Vec<String> = Vec::new();
@@ -101,6 +153,14 @@ pub(crate) fn to_string<T: AsRef<dyn std::error::Error>>(err: T) -> String {
 
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_source_error() {
+        assert_eq!(
+            SourceError::from("io::Error: ", io::Error::from(io::ErrorKind::NotFound)).to_string(),
+            "io::Error: entity not found"
+        );
+    }
 
     #[test]
     fn with_data() {

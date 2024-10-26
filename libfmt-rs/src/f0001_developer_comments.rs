@@ -646,6 +646,26 @@ mod tests {
     use itertools::{peek_nth, PeekNth};
     use proc_macro2::{Group, Literal, TokenStream};
     use std::str::FromStr;
+    use tracing_test::traced_test;
+
+    // #[test]
+    // fn test() {
+    //     let source = indoc! {r#"
+    //         fn main() {
+    //             if args.len() != 2 {
+    //                 // placeholder
+    //             }
+    //         }
+    //     "#};
+    //     assert_eq!(
+    //         crate::format_str(None, source).unwrap(),
+    //         indoc! {r#"
+    //             fn main() {
+    //                 if args.len() != 2 {}
+    //             }
+    //         "#},
+    //     );
+    // }
 
     #[test]
     fn allow_func_separation_from_body() {
@@ -1178,6 +1198,29 @@ mod tests {
             }
             recurse(&mut iter)
         }
+    }
+
+    #[traced_test]
+    #[test]
+    fn test() {
+        let source = indoc! {r#"
+            fn main() {
+                // placeholder
+            }
+        "#};
+
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        tokens.print();
+
+        // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        // assert_eq!(tokens.comment_count(), 1);
+        // let group = tokens.get((0, 9)).as_group();
+        // let tokens = group.stream().into_iter();
+        // assert_eq!(
+        //     tokens.comments_before((1, 4)),
+        //     vec![Comment::line_trailing(" A variant".into())]
+        // );
     }
 
     #[test]

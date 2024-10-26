@@ -18,4 +18,9 @@ exclude = [
     ".vscode",
 ]
 
+[workspace]
+members = ["libfmt-rs"]
+
 [dependencies]
+anyhow = "1.0"
+libfmt-rs = { path = "libfmt-rs" }

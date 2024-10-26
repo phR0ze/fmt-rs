@@ -29,11 +29,11 @@ use tracing::trace;
 pub use model::error::{Error, Result};
 
 /// Format the given source file
-pub fn format_file<T: AsRef<Path>>(path: T) -> Result<String> {
+pub fn format_file<T: AsRef<Path>>(config: Option<Config>, path: T) -> Result<String> {
     let path = path.as_ref();
     let source = std::fs::read_to_string(path)
         .map_err(|e| Error::new("failed to read source file").wrap_io(e))?;
-    format_str(None, &source)
+    format_str(config, &source)
 }
 
 /// Format the given source string
