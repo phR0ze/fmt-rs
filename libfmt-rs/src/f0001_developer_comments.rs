@@ -88,6 +88,7 @@ impl<'a> Commenter<'a> {
                 self.append_curr(curr.take());
                 self.pass_doc_comments(end);
                 self.complete_line(true);
+                self.inject_comments(end, CommentCategory::Both);
 
             // End a group
             } else if curr.is_group_end() {
