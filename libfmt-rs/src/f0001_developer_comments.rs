@@ -82,23 +82,21 @@ impl<'a> Commenter<'a> {
                 end = self.inject_comments(end, CommentCategory::Trailing);
                 self.append_group(curr.take());
                 self.inject_comments(end, CommentCategory::Regular);
-
-            // Pass proc_macro2 parsed doc comments directly through without processing
-            } else if self.is_doc_comment(&curr) {
-                self.append_curr(curr.take());
-                self.pass_doc_comments(end);
-                self.complete_line(true);
-                self.inject_comments(end, CommentCategory::Both);
-
-            // End a group
-            } else if curr.is_group_end() {
-                self.inject_comments(end, CommentCategory::Both);
-                self.complete_group(&curr);
-                continue;
-
-            // Store regular tokens
             } else {
-                self.append_curr(curr.take());
+                // Pass proc_macro2 parsed doc comments directly through without processing
+                if self.is_doc_comment(&curr) {
+                    self.append_curr(curr.take());
+                    self.pass_doc_comments(end);
+                    self.complete_line(true);
+
+                // End a group
+                } else if curr.is_group_end() {
+                    self.complete_group(&curr);
+
+                // Store regular tokens
+                } else {
+                    self.append_curr(curr.take());
+                }
                 self.inject_comments(end, CommentCategory::Both);
             }
         }
@@ -611,24 +609,74 @@ mod tests {
     use std::str::FromStr;
     use tracing_test::traced_test;
 
-    // #[test]
-    // fn test() {
-    //     let source = indoc! {r#"
-    //         fn main() {
-    //             if args.len() != 2 {
-    //                 // placeholder
-    //             }
-    //         }
-    //     "#};
-    //     assert_eq!(
-    //         crate::format_str(None, source).unwrap(),
-    //         indoc! {r#"
-    //             fn main() {
-    //                 if args.len() != 2 {}
-    //             }
-    //         "#},
-    //     );
-    // }
+    #[test]
+    fn comment_after_group_pp() {
+        let source = indoc! {r#"
+            fn main() {
+                if true {
+                    std::process::exit(1);
+                }
+
+                // Comment after group
+                struct foo;
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    if true {
+                        std::process::exit(1);
+                    }
+
+                    // Comment after group
+                    struct foo;
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn inject_dummy_struct_nested_pp() {
+        let source = indoc! {r#"
+            fn main() {
+                {
+                    // placeholder
+                }
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    {
+                        // placeholder
+                    }
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn inject_dummy_struct_pp() {
+        let source = indoc! {r#"
+            fn main() {
+                if args.len() != 2 {
+                    // placeholder
+                }
+            }
+        "#};
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    if args.len() != 2 {
+                        // placeholder
+                    }
+                }
+            "#},
+        );
+    }
 
     #[test]
     fn allow_func_separation_from_body() {
@@ -1068,11 +1116,13 @@ mod tests {
             let pos = pos.into();
             let stream = TokenStream::from_iter(self.clone());
             let flattened = expand_tokens(stream);
-            flattened
-                .into_iter()
-                .map(|x| (*x).clone())
-                .find(|x| pos == Position::from(x.span().start()))
-                .unwrap()
+            for x in flattened.into_iter() {
+                let pos2 = x.span().0;
+                if pos == pos2 {
+                    return (*x).clone();
+                }
+            }
+            panic!("Group at position {:?} not found", pos);
         }
 
         /// Get the comments after the given position
@@ -1181,6 +1231,36 @@ mod tests {
             }
             recurse(&mut iter)
         }
+    }
+
+    // Originally I was seeing the comment show up in the group
+    #[test]
+    fn comment_after_group() {
+        let source = indoc! {r#"
+            fn main() {
+                if true {
+                    std::process::exit(1);
+                }
+
+                // Comment after group
+                struct foo;
+            }
+        "#};
+
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        tokens.print();
+
+        assert_eq!(tokens.comment_count(), 2);
+        let group = tokens.get((0, 10)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((6, 4)),
+            vec![
+                Comment::empty(),
+                Comment::line(" Comment after group".into())
+            ]
+        );
     }
 
     #[test]

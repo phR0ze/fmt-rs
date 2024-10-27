@@ -224,6 +224,13 @@ impl Engine {
 
     fn item_struct(&mut self, item: &ItemStruct) {
         self.outer_attrs(&item.attrs);
+
+        // Skip printing dummy structs used to trick syn
+        // Feature F0002: Smart wrapping
+        if item.ident.to_string().starts_with(crate::DUMMY_STRUCT) {
+            return;
+        }
+
         self.scan_begin_vertical(self.config.indent);
         self.visibility(&item.vis);
         self.scan_string("struct ");
