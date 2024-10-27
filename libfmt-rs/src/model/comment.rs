@@ -1,6 +1,14 @@
 use crate::Error;
 use std::str::FromStr;
 
+/// Comment category
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum CommentCategory {
+    Regular,
+    Trailing,
+    Both,
+}
+
 /// Encapsulate the different types of comments that can be found in the source
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) enum Comment {

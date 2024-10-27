@@ -1,27 +1,51 @@
-use super::{Comment, Config, Position, Source};
-use proc_macro2::{
-    token_stream, Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree,
-};
-use std::{collections::VecDeque, iter::Fuse, vec};
+use super::Position;
+use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream, TokenTree};
+use std::{collections::VecDeque, vec};
 use tracing::trace;
 
-/// Extension trait for proc_macro2::TokenTree
-pub(crate) trait TokenExt {
-    fn span_open(&self) -> (Position, Position);
-    fn span_close(&self) -> (Position, Position);
+pub(crate) trait TokenWrapExt {
+    /// Check if the token is a group start
+    fn is_group_start(&self) -> bool;
+
+    /// Check if the token is a group end
+    fn is_group_end(&self) -> bool;
+
+    /// Will typically be an open span, but a group end will be a close span
+    fn span(&self) -> (Position, Position);
 }
 
 pub(crate) trait OptionTokenExt {
-    fn span_open(&self) -> (Option<Position>, Option<Position>);
-    fn span_close(&self) -> (Option<Position>, Option<Position>);
+    fn is_group_start(&self) -> bool;
+    fn is_group_end(&self) -> bool;
+    fn span(&self) -> (Option<Position>, Option<Position>);
 }
 
-impl TokenExt for TokenWrap {
-    fn span_open(&self) -> (Position, Position) {
+impl TokenWrapExt for TokenWrap {
+    /// Check if the token is a group start
+    fn is_group_start(&self) -> bool {
+        match self {
+            TokenWrap::GroupStart(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Check if the token is a group end
+    fn is_group_end(&self) -> bool {
+        match self {
+            TokenWrap::GroupEnd(_) => true,
+            _ => false,
+        }
+    }
+
+    fn span(&self) -> (Position, Position) {
         let x = &**self;
         match x {
             TokenTree::Group(group) => {
-                let span = group.span_open();
+                let span = if self.is_group_end() {
+                    group.span_close()
+                } else {
+                    group.span_open()
+                };
                 (span.start().into(), span.end().into())
             }
             _ => {
@@ -30,53 +54,48 @@ impl TokenExt for TokenWrap {
             }
         }
     }
-    fn span_close(&self) -> (Position, Position) {
-        let x = &**self;
-        match x {
-            TokenTree::Group(group) => {
-                let span = group.span_close();
-                (span.start().into(), span.end().into())
-            }
-            _ => {
-                let span = x.span();
-                (span.start().into(), span.end().into())
-            }
-        }
-    }
 }
 
-impl TokenExt for &TokenWrap {
-    fn span_open(&self) -> (Position, Position) {
-        (**self).span_open()
+impl TokenWrapExt for &TokenWrap {
+    fn is_group_start(&self) -> bool {
+        (**self).is_group_start()
     }
-    fn span_close(&self) -> (Position, Position) {
-        (**self).span_close()
+    fn is_group_end(&self) -> bool {
+        (**self).is_group_end()
+    }
+    fn span(&self) -> (Position, Position) {
+        (**self).span()
     }
 }
 
 impl OptionTokenExt for Option<TokenWrap> {
-    fn span_open(&self) -> (Option<Position>, Option<Position>) {
-        self.as_ref().span_open()
+    fn is_group_start(&self) -> bool {
+        self.as_ref().is_group_start()
     }
-
-    fn span_close(&self) -> (Option<Position>, Option<Position>) {
-        self.as_ref().span_close()
+    fn is_group_end(&self) -> bool {
+        self.as_ref().is_group_end()
+    }
+    fn span(&self) -> (Option<Position>, Option<Position>) {
+        self.as_ref().span()
     }
 }
 
 impl OptionTokenExt for Option<&TokenWrap> {
-    fn span_open(&self) -> (Option<Position>, Option<Position>) {
+    fn is_group_start(&self) -> bool {
         match *self {
-            Some(x) => match x.span_open() {
-                (start, end) => (Some(start), Some(end)),
-            },
-            None => (None, None),
+            Some(x) => x.is_group_start(),
+            _ => false,
         }
     }
-
-    fn span_close(&self) -> (Option<Position>, Option<Position>) {
+    fn is_group_end(&self) -> bool {
         match *self {
-            Some(x) => match x.span_close() {
+            Some(x) => x.is_group_end(),
+            _ => false,
+        }
+    }
+    fn span(&self) -> (Option<Position>, Option<Position>) {
+        match *self {
+            Some(x) => match x.span() {
                 (start, end) => (Some(start), Some(end)),
             },
             None => (None, None),
@@ -84,100 +103,50 @@ impl OptionTokenExt for Option<&TokenWrap> {
     }
 }
 
-// impl OptionTokenExt for Option<TokenTree> {
-//     fn is_comment_ident(&self) -> bool {
-//         self.as_ref().is_comment_ident()
-//     }
+/// Extension trait for proc_macro2::TokenTree
+pub(crate) trait TokenTreeExt {
+    fn is_comment_punct(&self) -> bool;
+    fn is_comment_ident(&self) -> bool;
+    fn is_comment_group(&self) -> bool;
+    fn is_empty_group(&self) -> bool;
+}
 
-//     fn is_comment_group(&self) -> bool {
-//         self.as_ref().is_comment_group()
-//     }
+impl TokenTreeExt for TokenTree {
+    /// Determine if the token is a comment punctuator
+    fn is_comment_punct(&self) -> bool {
+        match self {
+            TokenTree::Punct(p) => p.as_char() == '#',
+            _ => false,
+        }
+    }
 
-//     fn is_punct(&self, char: char) -> bool {
-//         self.as_ref().is_punct(char)
-//     }
+    /// Determine if the token is a comment identifier
+    fn is_comment_ident(&self) -> bool {
+        if let TokenTree::Ident(i) = self {
+            return i.to_string().starts_with("comment_");
+        }
+        false
+    }
 
-//     fn span_open(&self) -> (Option<Position>, Option<Position>) {
-//         self.as_ref().span_open()
-//     }
+    /// Determine if the token is a comment group
+    fn is_comment_group(&self) -> bool {
+        if let TokenTree::Group(g) = self {
+            let stream = g.stream().into_iter().collect::<Vec<_>>();
+            if stream.len() == 3 && stream[0].is_comment_ident() {
+                return true;
+            }
+        }
+        false
+    }
 
-//     fn span_close(&self) -> (Option<Position>, Option<Position>) {
-//         self.as_ref().span_close()
-//     }
-// }
-
-// impl TokenExt for TokenTree {
-//     /// Determine if the token is a comment identifier
-//     fn is_comment_ident(&self) -> bool {
-//         if let TokenTree::Ident(i) = self {
-//             return i.to_string().starts_with("comment_");
-//         }
-//         false
-//     }
-
-//     /// Determine if the token is a comment group
-//     fn is_comment_group(&self) -> bool {
-//         if let TokenTree::Group(g) = self {
-//             let stream = g.stream().into_iter().collect::<Vec<_>>();
-//             if stream.len() == 3 && stream[0].is_comment_ident() {
-//                 return true;
-//             }
-//         }
-//         false
-//     }
-
-//     /// Determine if the token is the given punctuation character
-//     fn is_punct(&self, char: char) -> bool {
-//         match self {
-//             TokenTree::Punct(p) => p.as_char() == char,
-//             _ => false,
-//         }
-//     }
-
-//     /// Get the open span
-//     fn span_open(&self) -> (Position, Position) {
-//         match self {
-//             TokenTree::Ident(ident) => {
-//                 let span = ident.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Literal(literal) => {
-//                 let span = literal.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Group(group) => {
-//                 let span = group.span_open();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Punct(punct) => {
-//                 let span = punct.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//         }
-//     }
-
-//     /// Get the close span
-//     fn span_close(&self) -> (Position, Position) {
-//         match self {
-//             TokenTree::Ident(ident) => {
-//                 let span = ident.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Literal(literal) => {
-//                 let span = literal.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Group(group) => {
-//                 let span = group.span_close();
-//                 (span.start().into(), span.end().into())
-//             }
-//             TokenTree::Punct(punct) => {
-//                 let span = punct.span();
-//                 (span.start().into(), span.end().into())
-//             }
-//         }
-//     }
-// }
+    /// Check if the token is a group and is empty
+    fn is_empty_group(&self) -> bool {
+        if let TokenTree::Group(g) = self {
+            return g.stream().is_empty();
+        }
+        false
+    }
+}
 
 /// Token Group wrapper for managing token lines
 #[derive(Debug)]
@@ -207,6 +176,7 @@ impl TokenGroup {
     pub(crate) fn complete(&mut self) {
         self.complete.append(&mut self.curr_line);
         self.complete.append(&mut self.next_line);
+        self.append_dummies_if_needed();
     }
 
     /// Complete the current line
@@ -217,6 +187,38 @@ impl TokenGroup {
 
     pub(crate) fn into_token_stream(self) -> TokenStream {
         TokenStream::from_iter(self.complete.into_iter())
+    }
+
+    /// Detect if the complete vector has a comment as its last item which syn will barf on.
+    /// Comments have to be attached to a code element for syn to be happy.
+    fn last_item_is_comment(&self) -> bool {
+        let len = self.complete.len();
+        if len > 1 {
+            if self.complete[len - 2].is_comment_punct() {
+                if self.complete[len - 1].is_comment_group() {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
+    /// Append the tokens that compose dummy constructs to the complete vector to ensure that the
+    /// token stream is valid for syn. syn will barf if we include attributes without a code element
+    /// to attach them to.
+    fn append_dummies_if_needed(&mut self) {
+        if self.last_item_is_comment() {
+            trace!("APPEND_DUMMY_STRUCT");
+
+            let token = TokenTree::from(Ident::new("struct", Span::call_site()));
+            self.complete.push(token);
+
+            let token = TokenTree::from(Ident::new(crate::DUMMY_STRUCT, Span::call_site()));
+            self.complete.push(token);
+
+            let token = TokenTree::from(Punct::new(';', Spacing::Alone));
+            self.complete.push(token);
+        }
     }
 }
 
@@ -256,54 +258,6 @@ impl TokenGroup {
 //         self.push(token);
 //     }
 
-//     /// Inject a dummy struct tokens to ensure that the token stream is valid for syn
-//     ///
-//     /// * ***tokens***: Token stream to inject the dummy into
-//     pub(crate) fn inject_dummy_struct(&mut self) {
-//         let token = TokenTree::from(Ident::new("struct", Span::call_site()));
-//         trace!("{}", TokenWrap::Token(token.clone()).to_str());
-//         self.push(token);
-
-//         let token = TokenTree::from(Ident::new(crate::DUMMY_STRUCT, Span::call_site()));
-//         trace!("{}", TokenWrap::Token(token.clone()).to_str());
-//         self.push(token);
-
-//         let token = TokenTree::from(Punct::new(';', Spacing::Alone));
-//         trace!("{}", TokenWrap::Token(token.clone()).to_str());
-//         self.push(token);
-//     }
-
-//     /// Convert the token stream into a string for debugging purposes
-//     pub(crate) fn to_str(&self) -> String {
-//         fn recurse<'a>(iter: impl Iterator<Item = &'a TokenTree>) -> String {
-//             let mut str = String::new();
-//             for token in iter {
-//                 match token {
-//                     TokenTree::Group(g) => {
-//                         str.push_str(&format!(
-//                             "{}\n",
-//                             TokenWrap::GroupStart(token.clone()).to_str()
-//                         ));
-//                         str.push_str(&recurse(g.stream().into_iter().collect::<Vec<_>>().iter()));
-//                         str.push_str(&format!(
-//                             "{}\n",
-//                             TokenWrap::GroupEnd(token.clone()).to_str()
-//                         ));
-//                     }
-//                     _ => str.push_str(&format!("{}\n", TokenWrap::Token(token.clone()).to_str())),
-//                 }
-//             }
-//             str
-//         }
-//         recurse(&mut self.0.iter())
-//     }
-
-//     /// Convert the token stream into a TokenStream
-//     pub(crate) fn into_token_stream(self) -> TokenStream {
-//         self.0.into_iter().collect()
-//     }
-// }
-
 /// Helper type for storing TokenTree variants
 #[derive(Debug, Clone)]
 pub(crate) enum TokenWrap {
@@ -336,7 +290,8 @@ impl TokenWrap {
                 return "".to_string();
             }
 
-            let (start, end) = token.span_open();
+            // Get the token's span
+            let (start, end) = token.span();
             let mut out = if *depth > 1 {
                 String::new()
             } else {

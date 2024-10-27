@@ -6,8 +6,8 @@
 // ---------------------------------------------------------------------------------------------
 use crate::{
     model::{
-        Comment, Config, OptionTokenExt, Position, Source, TokenExt, TokenGroup, TokenItem,
-        TokenWrap,
+        Comment, CommentCategory, Config, OptionTokenExt, Position, Source, TokenGroup, TokenItem,
+        TokenTreeExt, TokenWrap, TokenWrapExt,
     },
     Error, Result,
 };
@@ -21,7 +21,7 @@ use tracing::trace;
 /// proc_macro2 recognizes doc comments and stores them as attributes but does not recognize regular
 /// comments and skips them only providing a partial solution. However we can parse the resulting
 /// tokens and inject the missing comments as a made up comment attribute that will then be
-/// recognized by the pretty printer.
+/// recognized by the pretty printer with some modifications.
 ///
 /// * ***config***: Configuration settings
 /// * ***source***: Original source
@@ -58,38 +58,30 @@ impl<'a> Commenter<'a> {
 
     /// Inject comments into the token stream from the source
     pub(crate) fn inject(mut self) -> Self {
-        let mut src: Option<String>;
-
-        // Comments file only
-        // -----------------------------------------------------------------------------------------
+        // Only comments in file
         if self.is_empty() && self.stream.is_empty() {
-            src = self.source.range(None, None);
+            let src = self.source.range(None, None);
             if let Some(comments) = parse_comments(self.config, src.as_deref(), false) {
                 self.append_curr_comments(comments, true);
             }
         }
 
-        let mut end = Position::default();
         while let Some(curr) = self.stream.pop_front() {
-            let (start, end0) = curr.span_open();
-
-            // Group end's will have stale positions we need to avoid
-            if end0 > end {
-                end = end0;
-            }
+            let (start, mut end) = curr.span();
 
             // Leading comments - haven't processed any tokens yet
             if self.is_empty() {
-                src = self.source.range(None, Some(start));
+                let src = self.source.range(None, Some(start));
                 if let Some(comments) = parse_comments(self.config, src.as_deref(), false) {
                     self.append_curr_comments(comments, false);
                 }
             }
 
             // Start a new group
-            if self.is_group_start(&curr) {
-                end = self.prepend_trailing_comments(end);
+            if curr.is_group_start() {
+                end = self.inject_comments(end, CommentCategory::Trailing);
                 self.append_group(curr.take());
+                self.inject_comments(end, CommentCategory::Regular);
 
             // Pass proc_macro2 parsed doc comments directly through without processing
             } else if self.is_doc_comment(&curr) {
@@ -97,37 +89,41 @@ impl<'a> Commenter<'a> {
                 self.pass_doc_comments(end);
                 self.complete_line(true);
 
-            // End a new group
-            } else if self.is_group_end(&curr) {
-                self.inject_comments(end);
+            // End a group
+            } else if curr.is_group_end() {
+                self.inject_comments(end, CommentCategory::Both);
                 self.complete_group(&curr);
                 continue;
 
             // Store regular tokens
             } else {
                 self.append_curr(curr.take());
+                self.inject_comments(end, CommentCategory::Both);
             }
-
-            // Check for comments between tokens
-            self.inject_comments(end);
         }
 
         self.complete();
         self
     }
 
-    /// Inject any comments trailing the current line of code
+    /// Check the given range and inject any found comments in the appropriate lines. If only
+    /// searching for trailing comments then advance the trailing comments line end to avoid
+    /// duplicating them later.
     ///
-    /// * ***start***: Start position of the current line
+    /// * ***curr***: Current token
+    /// * ***start***: Start position of the range
     /// * ***return***: End position of the current line or if no comments are found the original start
-    fn prepend_trailing_comments(&mut self, start: Position) -> Position {
-        if let Some(token1) = self.stream.front() {
-            // Get the next token's start position which will be the end
-            let end = token1.span_open().0;
-            let src = self.source.range(Some(start), Some(end));
+    fn inject_comments(&mut self, start: Position, category: CommentCategory) -> Position {
+        // Determine the correct end of this range based on the next tokens's start.
+        let end = self.stream.front().span().0;
+        let src = self.source.range(Some(start), end);
 
-            if let Some(comments) = parse_comments(self.config, src.as_deref(), true) {
-                // Determine if we have any trailing comments
+        if let Some(comments) = parse_comments(self.config, src.as_deref(), true) {
+            // Trailing comments also act as line breaks
+            let newline = comments.iter().any(|x| x.is_break() || x.is_trailing());
+
+            // Add trailing comments to begining of current line
+            if category == CommentCategory::Trailing || category == CommentCategory::Both {
                 let comments: Vec<Comment> = comments
                     .clone()
                     .into_iter()
@@ -136,70 +132,35 @@ impl<'a> Commenter<'a> {
                 if !comments.is_empty() {
                     self.prepend_curr_comments(comments, false);
 
-                    // Source location up to the first newline
-                    return self.source.inc_past_newline(start, end);
+                    // Advance in the trailing only case
+                    if category == CommentCategory::Trailing {
+                        if let Some(end) = end {
+                            return self.source.inc_past_newline(start, end);
+                        }
+                    }
                 }
             }
-        }
-        start
-    }
-
-    /// Check the given range and inject any found comments in the appropriate lines
-    ///
-    /// * ***start***: Start position of the range
-    fn inject_comments(&mut self, start: Position) {
-        // Get the next token's start position or the end of the source which will be the end
-        let end = self.stream.front().span_open().0;
-        let src = self.source.range(Some(start), end);
-
-        let mut newline = false;
-        if let Some(comments) = parse_comments(self.config, src.as_deref(), true) {
-            // Trailing comments also act as line breaks
-            newline = comments.iter().any(|x| x.is_break() || x.is_trailing());
-
-            // Add trailing comments to begining of current line
-            self.prepend_curr_comments(
-                comments
-                    .clone()
-                    .into_iter()
-                    .filter(|x| x.is_trailing())
-                    .collect(),
-                false,
-            );
 
             // Add regular comments between tokens to next line
-            self.append_next_comments(
-                comments
-                    .clone()
-                    .into_iter()
-                    .filter(|x| x.is_regular())
-                    .collect(),
-                false,
-            );
+            if category == CommentCategory::Regular || category == CommentCategory::Both {
+                self.append_next_comments(
+                    comments
+                        .clone()
+                        .into_iter()
+                        .filter(|x| x.is_regular())
+                        .collect(),
+                    false,
+                );
+            }
+            self.complete_line(newline);
         }
-        self.complete_line(newline);
-    }
-
-    /// Check if the token is a group start
-    fn is_group_start(&self, wrap: &TokenWrap) -> bool {
-        if let TokenWrap::GroupStart(_) = wrap {
-            return true;
-        }
-        false
-    }
-
-    /// Check if the token is a group end
-    fn is_group_end(&self, wrap: &TokenWrap) -> bool {
-        if let TokenWrap::GroupEnd(_) = wrap {
-            return true;
-        }
-        false
+        start
     }
 
     /// Check if the token is a doc comment
     fn is_doc_comment(&self, wrap: &TokenWrap) -> bool {
         if let TokenWrap::Token(token) = wrap {
-            let (start, _) = wrap.span_open();
+            let (start, _) = wrap.span();
 
             if let TokenTree::Punct(punct) = token {
                 if punct.as_char() == '#' && self.source.char_at_is(start, '/') {
@@ -216,7 +177,7 @@ impl<'a> Commenter<'a> {
         let mut in_group = false;
 
         while let Some(token) = self.stream.pop_front() {
-            let (start, _) = token.span_open();
+            let (start, _) = token.span();
             if start < end {
                 trace!("{}", token.to_str());
                 if !in_group || token.is_group_start() {
@@ -255,12 +216,13 @@ impl<'a> Commenter<'a> {
 
     /// Complete group
     fn complete_group(&mut self, group: &TokenWrap) {
-        trace!("{}", group.to_str());
+        let group_end_str = group.to_str();
 
         // Create a new TokenTree::Group to capture group token changes
         if let Some(mut group) = self.groups.pop() {
             if let Some(TokenTree::Group(token)) = group.token.clone() {
                 group.complete();
+                trace!("{}", group_end_str);
                 let mut _group =
                     Group::new(token.delimiter(), TokenStream::from_iter(group.complete));
                 _group.set_span(token.span());
@@ -640,7 +602,7 @@ fn parse_comments(config: &Config, src: Option<&str>, some: bool) -> Option<Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::model::{pos, Position};
+    use crate::model::{pos, Position, TokenTreeExt};
     use core::panic;
     use indoc::indoc;
     use itertools::{peek_nth, PeekNth};
@@ -1025,11 +987,27 @@ mod tests {
     }
 
     trait TokenTestsExt {
+        fn is_ident(&self, name: &str) -> bool;
+        fn is_punct(&self, name: char) -> bool;
         fn as_group(self) -> Group;
         fn as_literal(self) -> Literal;
         fn to_comment(&self) -> Option<Comment>;
     }
     impl TokenTestsExt for TokenTree {
+        fn is_punct(&self, name: char) -> bool {
+            if let TokenTree::Punct(punct) = self {
+                punct.as_char() == name
+            } else {
+                false
+            }
+        }
+        fn is_ident(&self, name: &str) -> bool {
+            if let TokenTree::Ident(ident) = self {
+                ident.to_string() == name
+            } else {
+                false
+            }
+        }
         fn as_group(self) -> Group {
             if let TokenTree::Group(group) = self {
                 group
@@ -1087,8 +1065,12 @@ mod tests {
     impl<I: Iterator<Item = TokenTree> + Clone> TokensExt for I {
         fn get<P: Into<Position>>(&self, pos: P) -> TokenTree {
             let pos = pos.into();
-            let mut iter = self.clone();
-            iter.find(|x| pos == Position::from(x.span().start()))
+            let stream = TokenStream::from_iter(self.clone());
+            let flattened = expand_tokens(stream);
+            flattened
+                .into_iter()
+                .map(|x| (*x).clone())
+                .find(|x| pos == Position::from(x.span().start()))
                 .unwrap()
         }
 
@@ -1200,9 +1182,33 @@ mod tests {
         }
     }
 
-    #[traced_test]
     #[test]
-    fn test() {
+    fn inject_dummy_struct_nested() {
+        let source = indoc! {r#"
+            fn main() {
+                {
+                    // placeholder
+                }
+            }
+        "#};
+
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((1, 4)).as_group();
+        let tokens: Vec<TokenTree> = group.stream().into_iter().collect();
+        assert_eq!(tokens.len(), 5);
+
+        assert_eq!(tokens[0].is_comment_punct(), true);
+        assert_eq!(tokens[1].is_comment_group(), true);
+        assert_eq!(tokens[2].is_ident("struct"), true);
+        assert_eq!(tokens[3].is_ident(crate::DUMMY_STRUCT), true);
+        assert_eq!(tokens[4].is_punct(';'), true);
+    }
+
+    #[test]
+    fn inject_dummy_struct() {
         let source = indoc! {r#"
             fn main() {
                 // placeholder
@@ -1210,17 +1216,18 @@ mod tests {
         "#};
 
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
-        tokens.print();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
-        // assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 10)).as_group();
+        let tokens: Vec<TokenTree> = group.stream().into_iter().collect();
+        assert_eq!(tokens.len(), 5);
 
-        // assert_eq!(tokens.comment_count(), 1);
-        // let group = tokens.get((0, 9)).as_group();
-        // let tokens = group.stream().into_iter();
-        // assert_eq!(
-        //     tokens.comments_before((1, 4)),
-        //     vec![Comment::line_trailing(" A variant".into())]
-        // );
+        assert_eq!(tokens[0].is_comment_punct(), true);
+        assert_eq!(tokens[1].is_comment_group(), true);
+        assert_eq!(tokens[2].is_ident("struct"), true);
+        assert_eq!(tokens[3].is_ident(crate::DUMMY_STRUCT), true);
+        assert_eq!(tokens[4].is_punct(';'), true);
     }
 
     #[test]
@@ -1508,8 +1515,9 @@ mod tests {
         );
     }
 
+    #[traced_test]
     #[test]
-    fn mixing_comment_line_and_inner_and_outer_success() {
+    fn mix_with_doc_comments() {
         let source = indoc! {r#"
             //! Inner
             
@@ -1520,6 +1528,7 @@ mod tests {
         "#};
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+        tokens.print();
 
         assert_eq!(tokens.comment_count(), 3);
         assert_eq!(
@@ -1626,7 +1635,7 @@ mod tests {
         "#});
         assert_eq!(tokens.len(), 1);
         matches!(tokens.get(0).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(0).unwrap().span_open(), (pos(0, 0), pos(0, 4)));
+        assert_eq!(tokens.get(0).unwrap().span(), (pos(0, 0), pos(0, 4)));
         assert_eq!(tokens.get(1).is_none(), true);
 
         // Full three tokens
@@ -1637,37 +1646,31 @@ mod tests {
         assert_eq!(tokens.len(), 8);
 
         matches!(tokens.get(0).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(0).unwrap().span_open(), (pos(0, 0), pos(0, 7)));
+        assert_eq!(tokens.get(0).unwrap().span(), (pos(0, 0), pos(0, 7)));
 
         matches!(tokens.get(1).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(1).unwrap().span_open(), (pos(0, 7), pos(0, 8)));
+        assert_eq!(tokens.get(1).unwrap().span(), (pos(0, 7), pos(0, 8)));
 
         matches!(tokens.get(2).unwrap(), TokenWrap::GroupStart(_));
-        assert_eq!(tokens.get(2).unwrap().span_open(), (pos(0, 8), pos(0, 9)));
+        assert_eq!(tokens.get(2).unwrap().span(), (pos(0, 8), pos(0, 9)));
 
         matches!(tokens.get(3).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(3).unwrap().span_open(), (pos(0, 9), pos(0, 13)));
+        assert_eq!(tokens.get(3).unwrap().span(), (pos(0, 9), pos(0, 13)));
 
         matches!(tokens.get(4).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(4).unwrap().span_open(), (pos(0, 13), pos(0, 14)));
+        assert_eq!(tokens.get(4).unwrap().span(), (pos(0, 13), pos(0, 14)));
 
         matches!(tokens.get(5).unwrap(), TokenWrap::Token(_));
-        assert_eq!(tokens.get(5).unwrap().span_open(), (pos(0, 15), pos(0, 18)));
+        assert_eq!(tokens.get(5).unwrap().span(), (pos(0, 15), pos(0, 18)));
 
         matches!(tokens.get(6).unwrap(), TokenWrap::GroupEnd(_));
-        assert_eq!(
-            tokens.get(6).unwrap().span_close(),
-            (pos(0, 18), pos(0, 19))
-        );
+        assert_eq!(tokens.get(6).unwrap().span(), (pos(0, 18), pos(0, 19)));
 
         matches!(
             tokens.get(7).unwrap(),
             TokenWrap::Token(TokenTree::Punct(_))
         );
-        assert_eq!(
-            tokens.get(7).unwrap().span_close(),
-            (pos(0, 19), pos(0, 20))
-        );
+        assert_eq!(tokens.get(7).unwrap().span(), (pos(0, 19), pos(0, 20)));
 
         assert_eq!(tokens.get(8).is_none(), true);
     }

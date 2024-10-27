@@ -1,4 +1,5 @@
 use super::Position;
+use tracing::trace;
 
 /// Source provides a convenient way to store the source code of a program as a 2D vector of characters.
 /// This allows for easy manipulation of the source code for whitespace lookups.
@@ -92,7 +93,7 @@ impl Source {
     /// * If end is past source end then all characters up to the end of the source will be returned
     pub(crate) fn range(&self, start: Option<Position>, end: Option<Position>) -> Option<String> {
         let mut pos = start.unwrap_or_default();
-        let end = end.unwrap_or(Position::max());
+        let end = end.unwrap_or(self.end);
 
         if self.src.len() > 0 && pos < self.end && pos < end {
             let mut str = String::new();
@@ -104,6 +105,12 @@ impl Source {
                 }
                 pos = self.inc(pos);
             }
+            // trace!(
+            //     "Span {}..{} = {}",
+            //     start.unwrap_or_default(),
+            //     end,
+            //     str.escape_default()
+            // );
             Some(str)
         } else {
             None

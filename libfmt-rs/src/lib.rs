@@ -28,6 +28,8 @@ use tracing::trace;
 // Re-export the public API
 pub use model::error::{Error, Result};
 
+pub(crate) const DUMMY_STRUCT: &str = "DummyStruct";
+
 /// Format the given source file
 pub fn format_file<T: AsRef<Path>>(config: Option<Config>, path: T) -> Result<String> {
     let path = path.as_ref();
