@@ -610,6 +610,65 @@ mod tests {
     use tracing_test::traced_test;
 
     #[test]
+    fn if_else_if_block_comment() {
+        let source = indoc! {r#"
+            fn main() {
+                // If comment
+                if true {
+                    foo1();
+
+                // Else if comment
+                } else if true {
+                    foo2();
+
+                // Else comment
+                } else {
+                    foo3();
+                }
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 5);
+        assert_eq!(
+            tokens.get_tokens((0, 10)).comments_before((2, 4)),
+            vec![Comment::line(" If comment")]
+        );
+        assert_eq!(
+            tokens.get_tokens((2, 12)).comments_after((3, 14)),
+            vec![Comment::empty(), Comment::line(" Else if comment")]
+        );
+        assert_eq!(
+            tokens.get_tokens((6, 19)).comments_after((7, 14)),
+            vec![Comment::empty(), Comment::line(" Else comment")]
+        );
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    // If comment
+                    if true {
+                        foo1();
+
+                    // Else if comment
+                    } else if true {
+                        foo2();
+
+                    // Else comment
+                    } else {
+                        foo3();
+                    }
+                }
+             "#},
+        );
+    }
+
+    #[test]
     fn if_else_block_comment() {
         let source = indoc! {r#"
             fn main() {
@@ -696,6 +755,31 @@ mod tests {
                     }
                 }
              "#},
+        );
+    }
+
+    #[test]
+    fn trailing_stmt_local() {
+        let source = indoc! {r#"
+            fn main() {
+                let mut comments: Vec<Comment> = vec![]; // final results
+                let mut line = String::new(); // temp buffer
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    let mut comments: Vec<Comment> = vec![]; // final results
+                    let mut line = String::new(); // temp buffer
+                }
+            "#},
         );
     }
 
@@ -1281,6 +1365,7 @@ mod tests {
 
     trait TokensExt {
         fn get<P: Into<Position>>(&self, pos: P) -> TokenTree;
+        fn get_tokens<P: Into<Position>>(&self, pos: P) -> impl Iterator<Item = TokenTree>;
         fn comments_after<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comments_before<P: Into<Position>>(&self, pos: P) -> Vec<Comment>;
         fn comment_count(&self) -> usize;
@@ -1288,6 +1373,7 @@ mod tests {
         fn print(&self);
     }
     impl<I: Iterator<Item = TokenTree> + Clone> TokensExt for I {
+        /// Get the token at the given position
         fn get<P: Into<Position>>(&self, pos: P) -> TokenTree {
             let pos = pos.into();
             let stream = TokenStream::from_iter(self.clone());
@@ -1299,6 +1385,11 @@ mod tests {
                 }
             }
             panic!("Group at position {:?} not found", pos);
+        }
+
+        /// Assuming the given position is a group, get all the tokens within it
+        fn get_tokens<P: Into<Position>>(&self, pos: P) -> impl Iterator<Item = TokenTree> + Clone {
+            self.get(pos).as_group().stream().into_iter()
         }
 
         /// Get the comments after the given position

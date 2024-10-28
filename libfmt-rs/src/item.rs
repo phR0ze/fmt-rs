@@ -253,13 +253,19 @@ impl Engine {
             Fields::Named(fields) => {
                 self.where_clause_for_body(&item.generics.where_clause);
                 self.scan_string("{");
+
+                // Feature F0001: Developer comments
                 self.scan_trailing_comment(&item.attrs);
+
                 self.scan_break_newline_if_nonempty();
 
                 for field in fields.named.iter() {
                     self.scan_field(field);
                     self.scan_string(",");
+
+                    // Feature F0001: Developer comments
                     self.scan_trailing_comment(&field.attrs);
+
                     self.scan_break_newline();
                 }
 
@@ -277,6 +283,8 @@ impl Engine {
             Fields::Unit => {
                 self.where_clause_semi(&item.generics.where_clause);
                 self.scan_end();
+
+                // Feature F0001: Developer comments
                 self.scan_trailing_comment(&item.attrs);
             }
         }

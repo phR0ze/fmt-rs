@@ -39,6 +39,10 @@ impl Engine {
                     self.scan_end();
                 }
                 self.scan_string(";");
+
+                // Feature F0001: Developer Comments
+                self.scan_trailing_comment(&local.attrs);
+
                 self.scan_break_newline();
             }
             Stmt::Item(item) => self.item(item),
