@@ -1,3 +1,4 @@
+use crate::attrs;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
 use crate::{engine::Engine, model::BreakToken};
@@ -225,11 +226,20 @@ impl Engine {
     }
 
     fn item_struct(&mut self, item: &ItemStruct) {
+        // Adjust indent for comment which will always exist if there is a dummy
+        // Feature F0002: Smart wrapping
+        if item.ident.to_string().starts_with(crate::DUMMY_STRUCT) && self.track.elses {
+            self.scan_begin_horizontal(-self.config.indent);
+        }
         self.outer_attrs(&item.attrs);
 
         // Skip printing dummy structs used to trick syn
         // Feature F0002: Smart wrapping
         if item.ident.to_string().starts_with(crate::DUMMY_STRUCT) {
+            if self.track.elses {
+                self.scan_end(); // terminate the un-indent we did for the elses
+                self.track.comment = true;
+            }
             return;
         }
 

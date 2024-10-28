@@ -7,7 +7,7 @@
 use crate::{
     model::{
         Comment, CommentCategory, Config, OptionTokenExt, Position, Source, TokenGroup, TokenItem,
-        TokenTreeExt, TokenWrap, TokenWrapExt,
+        TokenWrap, TokenWrapExt,
     },
     Error, Result,
 };
@@ -610,6 +610,96 @@ mod tests {
     use tracing_test::traced_test;
 
     #[test]
+    fn if_else_block_comment() {
+        let source = indoc! {r#"
+            fn main() {
+                // If comment
+                if true {
+                    foo();
+
+                // Else comment
+                } else {
+                    foo();
+                }
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 3);
+        let group = tokens.get((2, 12)).as_group();
+        let tokens: Vec<TokenTree> = group.stream().into_iter().collect();
+        assert_eq!(tokens.len(), 10);
+
+        assert_eq!(tokens[0].is_ident("foo"), true);
+        assert_eq!(tokens[1].is_group(), true);
+        assert_eq!(tokens[2].is_punct(';'), true);
+        assert_eq!(tokens[3].is_comment_punct(), true);
+        assert_eq!(tokens[4].is_comment_group(), true);
+        assert_eq!(tokens[5].is_comment_punct(), true);
+        assert_eq!(tokens[6].get_comment(), " Else comment");
+        assert_eq!(tokens[7].is_ident("struct"), true);
+        assert_eq!(tokens[8].is_ident(crate::DUMMY_STRUCT), true);
+        assert_eq!(tokens[9].is_punct(';'), true);
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    // If comment
+                    if true {
+                        foo();
+
+                    // Else comment
+                    } else {
+                        foo();
+                    }
+                }
+             "#},
+        );
+    }
+
+    #[test]
+    fn block_scope_comment() {
+        let source = indoc! {r#"
+            fn main() {
+                // Block comment
+                {
+                    foo();
+                }
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 10)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((2, 4)),
+            vec![Comment::line(" Block comment".into())]
+        );
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    // Block comment
+                    {
+                        foo();
+                    }
+                }
+             "#},
+        );
+    }
+
+    #[test]
     fn trailing_fn_call() {
         let source = indoc! {r#"
             fn main() {
@@ -1100,6 +1190,8 @@ mod tests {
     trait TokenTestsExt {
         fn is_ident(&self, name: &str) -> bool;
         fn is_punct(&self, name: char) -> bool;
+        fn is_group(&self) -> bool;
+        fn get_comment(&self) -> String;
         fn as_group(self) -> Group;
         fn as_literal(self) -> Literal;
         fn to_comment(&self) -> Option<Comment>;
@@ -1118,6 +1210,28 @@ mod tests {
             } else {
                 false
             }
+        }
+        fn is_group(&self) -> bool {
+            if let TokenTree::Group(_) = self {
+                true
+            } else {
+                false
+            }
+        }
+        fn get_comment(&self) -> String {
+            if let TokenTree::Group(group) = self {
+                let tokens: Vec<TokenTree> = group.stream().into_iter().collect();
+                if tokens.len() == 3 {
+                    if let TokenTree::Literal(lit) = &tokens[2] {
+                        let str = lit.to_string();
+                        if str.len() > 1 {
+                            return str[1..str.len() - 1].to_string();
+                        }
+                        return str;
+                    }
+                }
+            }
+            "".into()
         }
         fn as_group(self) -> Group {
             if let TokenTree::Group(group) = self {
@@ -1344,7 +1458,7 @@ mod tests {
         assert_eq!(tokens.len(), 5);
 
         assert_eq!(tokens[0].is_comment_punct(), true);
-        assert_eq!(tokens[1].is_comment_group(), true);
+        assert_eq!(tokens[1].get_comment(), " placeholder");
         assert_eq!(tokens[2].is_ident("struct"), true);
         assert_eq!(tokens[3].is_ident(crate::DUMMY_STRUCT), true);
         assert_eq!(tokens[4].is_punct(';'), true);
@@ -1658,7 +1772,6 @@ mod tests {
         );
     }
 
-    #[traced_test]
     #[test]
     fn mix_with_doc_comments() {
         let source = indoc! {r#"

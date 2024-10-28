@@ -395,6 +395,11 @@ impl Engine {
         self.wrap_exterior_struct(&expr.cond);
         self.scan_end();
         if let Some((_else_token, else_branch)) = &expr.else_branch {
+            // By tracking if we are in an else we can roughly determine if a comment
+            // attached to a dummy struct should be un-indented one level
+            // Feature F0001: Developer comments
+            self.track.elses = true;
+
             let mut else_branch = &**else_branch;
             self.small_block(&expr.then_branch, &[]);
             loop {
@@ -429,6 +434,9 @@ impl Engine {
                 }
                 break;
             }
+
+            // Feature F0001: Developer comments
+            self.track.elses = false;
         } else if expr.then_branch.stmts.is_empty() {
             self.scan_string("{}");
         } else {
@@ -860,7 +868,14 @@ impl Engine {
                     }
                 }
             }
-            self.update_break_offset(-self.config.indent);
+
+            // Don't un-indent if we already have for the last comment
+            // Feature F0001: Developer comments
+            if self.track.elses && self.track.comment {
+                self.track.comment = false;
+            } else {
+                self.update_break_offset(-self.config.indent);
+            }
         }
         self.scan_string("}");
     }

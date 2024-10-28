@@ -86,6 +86,9 @@ pub struct Engine {
 
     /// Print related field for indentation to avoid writing trailing whitespace
     pub(crate) pending_indentation: usize,
+
+    // Tracking state
+    pub(crate) track: Track,
 }
 
 impl Engine {
@@ -103,6 +106,7 @@ impl Engine {
             print_stack: Vec::new(),
             indent: 0,
             pending_indentation: 0,
+            track: Track::default(),
         }
     }
 
