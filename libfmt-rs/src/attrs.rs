@@ -233,7 +233,21 @@ impl Engine {
     }
 }
 
+/// Detect if the given attributes have a trailing comment
+/// Feature F0001: Developer comments
+pub(crate) fn have_trailing_comment(attrs: &[Attribute]) -> bool {
+    for attr in attrs {
+        if let AttrStyle::Outer = attr.style {
+            if is_trailing_comment(attr) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Detect if the given attribute is a trailing comment
+/// Feature F0001: Developer comments
 fn is_trailing_comment(attr: &Attribute) -> bool {
     value_of_attribute("comment_line_trailing", attr).is_some()
 }

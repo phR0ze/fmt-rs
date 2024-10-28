@@ -610,6 +610,68 @@ mod tests {
     use tracing_test::traced_test;
 
     #[test]
+    fn trailing_fn_call() {
+        let source = indoc! {r#"
+            fn main() {
+                foo(); // Trailing fn
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 10)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((1, 4)),
+            vec![Comment::line_trailing(" Trailing fn".into())]
+        );
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    foo(); // Trailing fn
+                }
+            "#},
+        );
+    }
+
+    #[test]
+    fn trailing_subexpr_method_call() {
+        let source = indoc! {r#"
+            fn main() {
+                self.foo(); // Trailing self.fn
+            }
+        "#};
+
+        // Test comment injection
+        let tokens = inject(&Config::default(), source).unwrap().into_iter();
+        assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 1);
+        let group = tokens.get((0, 10)).as_group();
+        let tokens = group.stream().into_iter();
+        assert_eq!(
+            tokens.comments_before((1, 4)),
+            vec![Comment::line_trailing(" Trailing self.fn".into())]
+        );
+
+        // Test final comment printing
+        assert_eq!(
+            crate::format_str(None, source).unwrap(),
+            indoc! {r#"
+                fn main() {
+                    self.foo(); // Trailing self.fn
+                }
+            "#},
+        );
+    }
+
+    #[test]
     fn comment_after_group_pp() {
         let source = indoc! {r#"
             fn main() {

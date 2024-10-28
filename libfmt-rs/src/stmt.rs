@@ -1,4 +1,4 @@
-use crate::engine::Engine;
+use crate::{attrs, engine::Engine};
 use syn::{BinOp, Expr, Stmt};
 
 impl Engine {
@@ -63,9 +63,19 @@ impl Engine {
                 }
                 self.scan_begin_horizontal(0);
                 self.expr_beginning_of_line(expr, true);
-                if !remove_semi(expr) {
+
+                // Moved semi into Expr calls if they have trailing comments so that we can
+                // terminate the statement with the semi before printing the trailing comments.
+                // Feature F0001: Developer Comments
+                if !match expr {
+                    Expr::MethodCall(expr) => attrs::have_trailing_comment(&expr.attrs),
+                    Expr::Call(expr) => attrs::have_trailing_comment(&expr.attrs),
+                    _ => false,
+                } && !remove_semi(expr)
+                {
                     self.scan_string(";");
                 }
+
                 self.scan_end();
                 self.scan_break_newline();
             }

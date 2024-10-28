@@ -98,7 +98,9 @@ impl Engine {
         self.where_clause_for_body(&item.sig.generics.where_clause);
         self.scan_string("{");
 
+        // Feature F0001: Developer comments
         self.scan_trailing_comment(&item.attrs);
+
         self.scan_break_newline_if_nonempty();
         self.inner_attrs(&item.attrs);
         for stmt in &item.block.stmts {
@@ -708,6 +710,8 @@ impl Engine {
     }
 
     fn signature(&mut self, signature: &Signature) {
+        // Used to determine how where clause should print
+        // Feature F0002: Smart wrapping
         self.right_total.track_adds();
 
         if signature.constness.is_some() {
@@ -755,6 +759,8 @@ impl Engine {
         self.return_type(&signature.output);
         self.scan_end();
 
+        // Used to determine how where clause should print
+        // Feature F0002: Smart wrapping
         self.right_total.stop_tracking();
     }
 

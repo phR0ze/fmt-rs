@@ -1,4 +1,4 @@
-use crate::attrs;
+use crate::attrs::{self, have_trailing_comment};
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::model::BreakToken;
@@ -218,6 +218,13 @@ impl Engine {
         self.scan_string("(");
         self.call_args(&expr.args);
         self.scan_string(")");
+
+        // Trailing comments require we end the statement first
+        // Feature F0001: Developer comments
+        if have_trailing_comment(&expr.attrs) {
+            self.scan_string(";");
+            self.scan_trailing_comment(&expr.attrs);
+        }
     }
 
     fn subexpr_call(&mut self, expr: &ExprCall) {
@@ -532,6 +539,13 @@ impl Engine {
         let unindent_call_args = beginning_of_line && self.is_short_ident(&expr.receiver);
         self.subexpr_method_call(expr, beginning_of_line, unindent_call_args);
         self.scan_end();
+
+        // Trailing comments require we end the statement first
+        // Feature F0001: Developer comments
+        if beginning_of_line && have_trailing_comment(&expr.attrs) {
+            self.scan_string(";");
+            self.scan_trailing_comment(&expr.attrs);
+        }
     }
 
     fn subexpr_method_call(
