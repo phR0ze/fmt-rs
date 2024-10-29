@@ -1,7 +1,6 @@
-use crate::attrs;
+use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::path::PathKind;
-use crate::{engine::Engine, model::BreakToken};
 use proc_macro2::TokenStream;
 use syn::{
     Fields, FnArg, ForeignItem, ForeignItemFn, ForeignItemMacro, ForeignItemStatic,
@@ -398,7 +397,6 @@ impl Engine {
         self.scan_break_newline();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn item_verbatim(&mut self, item: &TokenStream) {
         if !item.is_empty() {
             unimplemented!("Item::Verbatim `{}`", item);
@@ -530,7 +528,6 @@ impl Engine {
         self.scan_break_newline();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn foreign_item_verbatim(&mut self, foreign_item: &TokenStream) {
         if !foreign_item.is_empty() {
             unimplemented!("ForeignItem::Verbatim `{}`", foreign_item);
@@ -628,7 +625,6 @@ impl Engine {
         self.scan_break_newline();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn trait_item_verbatim(&mut self, trait_item: &TokenStream) {
         if !trait_item.is_empty() {
             unimplemented!("TraitItem::Verbatim `{}`", trait_item);
@@ -719,7 +715,6 @@ impl Engine {
         self.scan_break_newline();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn impl_item_verbatim(&mut self, impl_item: &TokenStream) {
         if !impl_item.is_empty() {
             unimplemented!("ImplItem::Verbatim `{}`", impl_item);

@@ -167,7 +167,6 @@ impl Engine {
         self.ty(&pat.ty);
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn pat_verbatim(&mut self, pat: &TokenStream) {
         unimplemented!("Pat::Verbatim `{}`", pat);
     }

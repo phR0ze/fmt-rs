@@ -72,8 +72,9 @@ impl Engine {
                 // terminate the statement with the semi before printing the trailing comments.
                 // Feature F0001: Developer Comments
                 if !match expr {
-                    Expr::MethodCall(expr) => attrs::have_trailing_comment(&expr.attrs),
-                    Expr::Call(expr) => attrs::have_trailing_comment(&expr.attrs),
+                    Expr::MethodCall(expr) => attrs::has_trailing_comment(&expr.attrs),
+                    Expr::Call(expr) => attrs::has_trailing_comment(&expr.attrs),
+                    Expr::Assign(expr) => attrs::has_trailing_comment(&expr.attrs),
                     _ => false,
                 } && !remove_semi(expr)
                 {

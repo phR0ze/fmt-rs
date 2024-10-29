@@ -235,7 +235,7 @@ impl Engine {
 
 /// Detect if the given attributes have a trailing comment
 /// Feature F0001: Developer comments
-pub(crate) fn have_trailing_comment(attrs: &[Attribute]) -> bool {
+pub(crate) fn has_trailing_comment(attrs: &[Attribute]) -> bool {
     for attr in attrs {
         if let AttrStyle::Outer = attr.style {
             if is_trailing_comment(attr) {

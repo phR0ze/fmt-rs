@@ -758,6 +758,38 @@ mod tests {
         );
     }
 
+    // Something odd with this one. I'm not getting comment associated with the assign
+    // #[traced_test]
+    // #[test]
+    // fn trailing_expr_assign() {
+    //     let source = indoc! {r#"
+    //         fn main() {
+    //             comments = true; // trailing
+    //         }
+    //     "#};
+
+    //     // Test comment injection
+    //     let tokens = inject(&Config::default(), source).unwrap().into_iter();
+    //     assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+    //     tokens.print();
+
+    //     assert_eq!(tokens.comment_count(), 1);
+    //     assert_eq!(
+    //         tokens.get_tokens((0, 10)).comments_before((1, 4)),
+    //         vec![Comment::line_trailing(" trailing".into())]
+    //     );
+
+    //     // Test final comment printing
+    //     assert_eq!(
+    //         crate::format_str(None, source).unwrap(),
+    //         indoc! {r#"
+    //             fn main() {
+    //                 comments = true; // trailing
+    //             }
+    //         "#},
+    //     );
+    // }
+
     #[test]
     fn trailing_stmt_local() {
         let source = indoc! {r#"
@@ -770,6 +802,16 @@ mod tests {
         // Test comment injection
         let tokens = inject(&Config::default(), source).unwrap().into_iter();
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
+
+        assert_eq!(tokens.comment_count(), 2);
+        assert_eq!(
+            tokens.get_tokens((0, 10)).comments_before((1, 4)),
+            vec![Comment::line_trailing(" final results".into())]
+        );
+        assert_eq!(
+            tokens.get_tokens((0, 10)).comments_before((2, 4)),
+            vec![Comment::line_trailing(" temp buffer".into())]
+        );
 
         // Test final comment printing
         assert_eq!(
@@ -784,7 +826,7 @@ mod tests {
     }
 
     #[test]
-    fn trailing_fn_call() {
+    fn trailing_stmt_fn_call() {
         let source = indoc! {r#"
             fn main() {
                 foo(); // Trailing fn
@@ -796,10 +838,8 @@ mod tests {
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
         assert_eq!(tokens.comment_count(), 1);
-        let group = tokens.get((0, 10)).as_group();
-        let tokens = group.stream().into_iter();
         assert_eq!(
-            tokens.comments_before((1, 4)),
+            tokens.get_tokens((0, 10)).comments_before((1, 4)),
             vec![Comment::line_trailing(" Trailing fn".into())]
         );
 
@@ -827,10 +867,8 @@ mod tests {
         assert!(syn::parse2::<syn::File>(TokenStream::from_iter(tokens.clone())).is_ok());
 
         assert_eq!(tokens.comment_count(), 1);
-        let group = tokens.get((0, 10)).as_group();
-        let tokens = group.stream().into_iter();
         assert_eq!(
-            tokens.comments_before((1, 4)),
+            tokens.get_tokens((0, 10)).comments_before((1, 4)),
             vec![Comment::line_trailing(" Trailing self.fn".into())]
         );
 

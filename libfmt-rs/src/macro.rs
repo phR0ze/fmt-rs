@@ -13,10 +13,6 @@ impl Engine {
                 return;
             }
         }
-        #[cfg(feature = "verbatim")]
-        if ident.is_none() && self.standard_library_macro(mac, semicolon) {
-            return;
-        }
 
         // Scan the macro name and path e.g. `foo` or `foo::bar`
         self.scan_path(&mac.path, PathKind::Simple);

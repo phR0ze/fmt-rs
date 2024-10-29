@@ -162,7 +162,6 @@ impl Engine {
         self.scan_string(")");
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn type_verbatim(&mut self, ty: &TokenStream) {
         unimplemented!("Type::Verbatim `{}`", ty);
     }

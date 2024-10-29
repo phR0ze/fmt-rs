@@ -1,4 +1,4 @@
-use crate::attrs::{self, have_trailing_comment};
+use crate::attrs::{self, has_trailing_comment};
 use crate::engine::Engine;
 use crate::iter::IterDelimited;
 use crate::model::BreakToken;
@@ -150,6 +150,13 @@ impl Engine {
         self.scan_break_never();
         self.expr(&expr.right);
         self.scan_end();
+
+        // Trailing comments require we end the statement first
+        // Feature F0001: Developer comments
+        if has_trailing_comment(&expr.attrs) {
+            self.scan_string(";");
+            self.scan_trailing_comment(&expr.attrs);
+        }
     }
 
     fn expr_async(&mut self, expr: &ExprAsync) {
@@ -221,7 +228,7 @@ impl Engine {
 
         // Trailing comments require we end the statement first
         // Feature F0001: Developer comments
-        if have_trailing_comment(&expr.attrs) {
+        if has_trailing_comment(&expr.attrs) {
             self.scan_string(";");
             self.scan_trailing_comment(&expr.attrs);
         }
@@ -550,7 +557,7 @@ impl Engine {
 
         // Trailing comments require we end the statement first
         // Feature F0001: Developer comments
-        if beginning_of_line && have_trailing_comment(&expr.attrs) {
+        if beginning_of_line && has_trailing_comment(&expr.attrs) {
             self.scan_string(";");
             self.scan_trailing_comment(&expr.attrs);
         }
@@ -707,7 +714,6 @@ impl Engine {
         self.scan_end();
     }
 
-    #[cfg(not(feature = "verbatim"))]
     fn expr_verbatim(&mut self, expr: &TokenStream) {
         if !expr.is_empty() {
             unimplemented!("Expr::Verbatim `{}`", expr);
